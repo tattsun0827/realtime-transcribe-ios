@@ -1,25 +1,33 @@
 {
   "project": "realtime-transcribe-ios（iPhone/iPad向けリアルタイム文字起こしPWA）",
-  "phase": "UI刷新と安定化を反映済み。録音ボタンの見え方が未決着",
-  "session": 3,
+  "phase": "キー設定画面の修正を枝にコミット済み。master未合流でPages未反映",
+  "session": 4,
   "current_step": 5,
   "total_steps": 5,
   "completed_steps": ["step_0", "step_1", "step_2", "step_3", "step_4"],
-  "blocked": "本人の画面で「録音開始ボタンが無い」と2回報告。こちらの実測（1857x830）では y=753〜814 に描画されビューポート内。いただいた画像は下端が切れており再現できていない",
-  "branch": "master",
+  "blocked": "(1)本人の画面で「録音開始ボタンが無い」と2回報告・再現できておらず未決着 (2)今回の修正は目視確認とmaster合流が未実施",
+  "branch": "fix/setup-key-saved（b0c6f65・未push・上流未設定）",
   "remote": "https://github.com/tattsun0827/realtime-transcribe-ios (public)",
   "pages_url": "https://tattsun0827.github.io/realtime-transcribe-ios/",
   "skill": "~/.claude/skills/realtime-transcribe-app/SKILL.md（運用・改修の正本）",
-  "verify_command": "node scripts/verify.mjs（変更したら必ず通す・9項目/テスト20件）",
-  "next_command": "フッター（.record-bar）を必ず画面内に固定する修正。.screen の min-height:100dvh を実高さ固定に変え、操作部がビューポート外へ出ない構造にする",
+  "verify_command": "node scripts/verify.mjs（変更したら必ず通す・7項目/テスト3本）",
+  "next_command": "localhost:5510 で3状態を目視 → git switch master && git merge fix/setup-key-saved && git push → Pages build を待つ",
   "plan_doc": "設計図/2026-09-01_realtime-transcribe-ios.md",
+  "session_20260902_キー設定画面": {
+    "本人の訴え": "groq keyの設定画面が毎回聞いてくるのは不要。保存済みと出るようにしてほしい",
+    "原因（実測）": "index.html の #setup-screen に hidden が無く、app.js は type=\"module\"＝遅延実行のため、initScreen() が走るまで設定画面が描画されていた。キーは正しく保存されており、コード側のロジック（showScreen(loadApiKey() ? 'main' : 'setup')）は元から正しい",
+    "直した内容": "#setup-screen に hidden を付与／キーがあるときは「保存済み（gsk_…abcd）」＋「このまま始める」「別のキーに変える」だけを出し #setup-form（取得手順・入力欄・保存ボタン）を隠す／⚙設定の文言も「現在のキー」→「保存済み」へ統一／出し分けは savedKeyStatus() として settings-core.mjs に純粋関数化しテスト4件追加",
+    "検査": "node scripts/verify.mjs 7項目＋テスト3本すべて通過",
+    "未実施": "ブラウザでの目視確認（3状態）／master合流／Pages反映／iOS Chromeでの実機確認",
+    "利用環境（本人）": "PCはWindows、iPhone/iPadは**Chrome**で使う。iOS ChromeはWebKitなので audio/mp4 制約は同じで動く見込みだが未検証。ホーム画面追加はChromeだと保存領域が分かれる恐れがあるためSafariからを推奨と伝達済み",
+    "訂正": "SKILL.md の「PC横長対策として本文を max-width:720px 中央寄せで対処済み」は誤り。実際の .transcript に max-width は無く、本人指示で撤去された経緯がある（720px は会話一覧のカード側）"
+  },
   "session_20260902_安定化とUI刷新": {
-    "直した安定性の欠陥": "(1)マイク許可待ちの連打でrecordingが立つ前に再度startRecording()へ入り、ストリーム・AudioContext・監視ループが二重に走っていた→startingフラグで抑止 (2)AudioContextがsuspendedのまま始まると音量が常に0になり全セグメントが無音扱いで捨てられる→生成直後とvisibilitychangeでresume (3)MediaRecorderがpausedになると監視ループが静かに終わり録音中の表示のまま固まる→2秒ごとの番犬で区切り直し (4)復旧で監視ループが増殖しないようsegmentGenerationで世代管理",
-    "UIの変更": "本文のmax-widthを撤去し画面幅を使う／本文の「認識中…」を廃止し、空のプレースホルダーだけ残して進行は入力モニターの「変換中」で示す／確定文はtypingChunkSize()で900ms以内に流し込むタイプライター表示／配色を変数化しツールバー・録音ボタン(ピル型)・設定と一覧をカード化",
+    "直した安定性の欠陥": "(1)マイク許可待ちの連打でrecordingが立つ前に再度startRecording()へ入り二重に走っていた→startingフラグ (2)AudioContextがsuspendedのまま始まると音量が常に0で全セグメント無音扱い→生成直後とvisibilitychangeでresume (3)MediaRecorderがpausedになると監視ループが静かに終わる→2秒ごとの番犬 (4)監視ループ増殖をsegmentGenerationで世代管理",
+    "UIの変更": "本文のmax-widthを撤去し画面幅を使う／「認識中…」を廃止／確定文はtypingChunkSize()で900ms以内に流し込む／配色を変数化しカード化",
     "本人の指摘（守ること）": "左右の空間が無駄（max-widthを入れない）／認識中の文字は不要／もっとリアルタイムに出る感じがほしい",
-    "リアルタイム化の残り": "実際の到達時間は未改善。速くするにはMIN_DRAFT_MS(4000)を下げる必要があるが、ACS実績値のため未着手。2秒程度まで下げると体感は上がるが文が途中で切れやすくRPD消費も増える。本人へ提案済み・未回答",
-    "AI整形": "していない。normalizeTranscript(空白・句読点の圧縮)＋幻聴フィルタ＋重複除去のみ。録音後にまとめて整える形なら追加可能と提案済み・未回答",
+    "リアルタイム化の残り": "MIN_DRAFT_MS(4000)を下げれば体感は上がるがACS実績値のため未着手。提案済み・未回答",
     "コミット": "285b1de（安定化）/ a91061d（UI刷新）を master へ push・Pages built 確認済み"
   },
-  "last_saved": "2026-09-02T00:00:00.000Z"
+  "last_saved": "2026-09-02T21:10:00+09:00"
 }
