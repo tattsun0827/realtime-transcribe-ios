@@ -5,12 +5,12 @@
   "current_step": 2,
   "total_steps": 5,
   "completed_steps": ["step_0", "step_1"],
-  "blocked": true,
-  "blocked_reason": "Step2完了判定「iPhone実機で1分間話し続け、認識中→確定の順で逐次表示・自動スクロール」が未検証。ローカルPlaywright(フェイクマイク+ダミーキー)でVAD自動区切り・逐次送信・エラー処理・録音停止は確認済みだが、実キーでの成功パスとiPhone実機は未確認",
+  "blocked": false,
+  "blocked_reason": "",
   "branch": "master",
   "remote": "https://github.com/tattsun0827/realtime-transcribe-ios (public)",
   "pages_url": "https://tattsun0827.github.io/realtime-transcribe-ios/",
-  "next_command": "ユーザーがiPhoneでpages_urlを開き、実キーで1分ほど話し続けて逐次表示を確認。通れば「Step完了」でタグstep-2-done→Step3(文字サイズ変更・Wake Lock)へ",
+  "next_command": "ユーザーのiPhoneスクリーンショットでStep2のリアルタイム表示（逐次確定テキスト）は動作確認済み。文字サイズ変更（Step3の一部）も実装・確認済み。正式な「Step完了」発話はまだ無いため、次にユーザーから来たらstep-completeでstep-2-doneタグを打つ。残りはStep3のWake Lock（画面消灯防止）",
   "plan_doc": "設計図/2026-09-01_realtime-transcribe-ios.md",
-  "last_saved": "2026-09-01T12:22:00.000Z"
+  "last_saved": "2026-09-01T12:30:00.000Z"
 }
