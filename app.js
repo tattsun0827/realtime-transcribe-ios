@@ -13,6 +13,8 @@ const recordBtn = document.getElementById('record-btn');
 const recordBtnLabel = document.getElementById('record-btn-label');
 const transcriptEl = document.getElementById('transcript');
 const mainError = document.getElementById('main-error');
+const openSettingsBtn = document.getElementById('open-settings-btn');
+const openListBtn = document.getElementById('open-list-btn');
 
 let mediaStream = null;
 let recorder = null;
@@ -168,6 +170,22 @@ recordBtn.addEventListener('click', () => {
     mainError.hidden = false;
     console.error('[rec] start failed', err);
   });
+});
+
+// APIキーの再設定（本格的な設定画面はStep4以降。今はキー変更のみ）
+openSettingsBtn.addEventListener('click', () => {
+  const ok = confirm('Groq APIキーを削除して入力し直しますか？');
+  if (!ok) return;
+  try {
+    localStorage.removeItem(STORAGE_KEY_API);
+  } catch {}
+  apiKeyInput.value = '';
+  initScreen();
+});
+
+// 会話一覧はStep4で実装予定。今は未実装であることを明示する
+openListBtn.addEventListener('click', () => {
+  alert('会話の保存・一覧はまだ実装していません（次のStepで追加予定です）');
 });
 
 initScreen();
