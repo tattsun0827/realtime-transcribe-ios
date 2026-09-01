@@ -13,7 +13,7 @@ import {
 import {
   WAVE_SAMPLES,
   isValidApiKeyFormat,
-  maskApiKey,
+  savedKeyStatus,
   selectableMicDevices,
   micOptionLabel,
   resolveMicDeviceId,
@@ -41,6 +41,10 @@ const mainScreen = document.getElementById('main-screen');
 const apiKeyInput = document.getElementById('api-key-input');
 const saveKeyBtn = document.getElementById('save-key-btn');
 const setupError = document.getElementById('setup-error');
+const setupStatus = document.getElementById('setup-status');
+const setupForm = document.getElementById('setup-form');
+const setupContinueBtn = document.getElementById('setup-continue-btn');
+const setupChangeBtn = document.getElementById('setup-change-btn');
 const recordBtn = document.getElementById('record-btn');
 const recordBtnLabel = document.getElementById('record-btn-label');
 const transcriptEl = document.getElementById('transcript');
@@ -122,10 +126,38 @@ function showScreen(name) {
   }
 }
 
-// キーの有無で初期画面を出し分ける
-function initScreen() {
-  showScreen(loadApiKey() ? 'main' : 'setup');
+// 設定画面の中身を、キーの有無で組み替える。
+// 保存済みなら入力欄と取得手順を隠し「保存済み（gsk_…abcd）」だけを見せる。
+// 毎回キーを入れ直す画面に見えることが、この画面のいちばんの不満だった
+function renderSetupScreen({ forceForm = false } = {}) {
+  const status = savedKeyStatus(loadApiKey());
+  const showForm = forceForm || !status.saved;
+  setupStatus.textContent = status.label;
+  setupStatus.hidden = !status.saved;
+  setupStatus.classList.toggle('unset', !status.saved);
+  setupContinueBtn.hidden = !status.saved;
+  setupChangeBtn.hidden = !status.saved || forceForm;
+  setupForm.hidden = !showForm;
+  setupError.hidden = true;
 }
+
+// キーの有無で初期画面を出し分ける。保存済みなら設定画面は一度も出さない
+function initScreen() {
+  const hasKey = Boolean(loadApiKey());
+  renderSetupScreen();
+  showScreen(hasKey ? 'main' : 'setup');
+}
+
+// 保存済みの案内から、キーを入れ直す方へ切り替える
+setupChangeBtn.addEventListener('click', () => {
+  renderSetupScreen({ forceForm: true });
+  apiKeyInput.value = '';
+  apiKeyInput.focus();
+});
+
+setupContinueBtn.addEventListener('click', () => {
+  showScreen('main');
+});
 
 saveKeyBtn.addEventListener('click', () => {
   const value = apiKeyInput.value.trim();
@@ -619,11 +651,11 @@ let micTestAnalyser = null;
 let micTestData = null;
 let micTestTimer = null;
 
-// 保存済みキーの有無を伏せ字で示す
+// 保存済みキーの有無を伏せ字で示す。設定画面（画面1）と同じ文言に揃える
 function renderKeyStatus() {
-  const masked = maskApiKey(loadApiKey());
-  keyStatusEl.textContent = masked ? `現在のキー: ${masked}` : 'キーは未設定です';
-  keyStatusEl.classList.toggle('unset', !masked);
+  const status = savedKeyStatus(loadApiKey());
+  keyStatusEl.textContent = status.saved ? `${status.label} 入れ直すときだけ下に貼り付けてください` : status.label;
+  keyStatusEl.classList.toggle('unset', !status.saved);
 }
 
 // 接続中のマイクを選択肢に並べる。名前はマイクの使用を許可するまで空で返るため、その旨を案内する
