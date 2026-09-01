@@ -19,6 +19,7 @@ import {
   resolveMicDeviceId,
   audioConstraints,
   waveBarHeight,
+  typingChunkSize,
 } from './settings-core.mjs';
 import { createConversation, appendSegment, listConversations, getConversation, displayTitle } from './db.mjs';
 
@@ -32,6 +33,8 @@ const GROQ_MODEL = 'whisper-large-v3';
 const PROMPT_CONTEXT_CHARS = 200; // Groqのpromptに渡す直前確定テキストの上限（ハルシネーション対策）
 const FONT_SIZES = [16, 18, 20, 24, 28, 32, 36, 42, 48, 56, 64]; // px段階
 const DEFAULT_FONT_SIZE = 20;
+const TYPE_TOTAL_MS = 900; // 1セグメントを流し切るまでの上限。長文でもここで出し切る
+const TYPE_FRAME_MS = 33; // 流し込みの間隔（およそ30fps）
 
 const setupScreen = document.getElementById('setup-screen');
 const mainScreen = document.getElementById('main-screen');
@@ -59,6 +62,7 @@ const shareDetailBtn = document.getElementById('share-detail-btn');
 const micMonitor = document.getElementById('mic-monitor');
 const mainWaveCanvas = document.getElementById('main-wave');
 const micNameEl = document.getElementById('mic-name');
+const micBusyEl = document.getElementById('mic-busy');
 const micPickEl = document.getElementById('mic-pick');
 const settingsScreen = document.getElementById('settings-screen');
 const closeSettingsBtn = document.getElementById('close-settings-btn');
@@ -211,14 +215,27 @@ function updateMicMonitor(rms) {
   micPickEl.classList.toggle('on', rms >= VOICE_PEAK_RMS);
 }
 
-// 「認識中…」のグレー表示を追加し、その要素を返す（Groq応答が来たら確定テキストに置き換える）
+// 表示順を保つための空の器をDOMへ置き、その要素を返す。
+// 文字は入れない。「認識中…」が本文に並ぶと読みづらいので、変換の進行は入力モニターの帯で示す
 function addDraftPlaceholder() {
   const span = document.createElement('span');
   span.className = 'seg-draft';
-  span.textContent = '認識中… ';
   transcriptEl.appendChild(span);
-  transcriptEl.scrollTop = transcriptEl.scrollHeight;
   return span;
+}
+
+// 確定テキストを1フレームずつ流し込む。4〜15秒ぶんの文章が一度に現れると
+// 「止まっていて、たまに塊で出る」ように見えるため、喋る速さに近づけて流す
+function typeInto(el, text) {
+  const chunk = typingChunkSize(text.length, TYPE_TOTAL_MS, TYPE_FRAME_MS);
+  let shown = 0;
+  const step = () => {
+    shown = Math.min(text.length, shown + chunk);
+    el.textContent = shown < text.length ? text.slice(0, shown) : text + ' ';
+    transcriptEl.scrollTop = transcriptEl.scrollHeight;
+    if (shown < text.length) setTimeout(step, TYPE_FRAME_MS);
+  };
+  step();
 }
 
 // draftプレースホルダーを確定テキストへ置き換える（空文字なら要素ごと消す＝無音だった扱い）
@@ -230,9 +247,16 @@ function resolveDraftPlaceholder(placeholder, rawText) {
     return '';
   }
   placeholder.className = 'seg-confirmed';
-  placeholder.textContent = text + ' ';
-  transcriptEl.scrollTop = transcriptEl.scrollHeight;
+  typeInto(placeholder, text);
   return text;
+}
+
+// 変換の進行を入力モニターの帯に出す（本文には出さない）。
+// 録音を止めた直後もまだ変換中の分が残っているので、出し切るまでモニターは消さない
+function updateBusyIndicator() {
+  const busy = draftInFlight + draftQueue.length > 0;
+  micBusyEl.hidden = !busy;
+  micMonitor.hidden = !recording && !busy;
 }
 
 // 処理待ちキューを最大MAX_PARALLEL_SENDS本まで並列で流す。
@@ -242,13 +266,16 @@ function pumpDraftQueue() {
   while (draftInFlight < MAX_PARALLEL_SENDS && draftQueue.length) {
     const { blob, placeholder, conversationId } = draftQueue.shift();
     draftInFlight++;
+    updateBusyIndicator();
     sendChunkToGroq(blob, placeholder, conversationId)
       .catch((err) => console.error('[groq] unexpected', err))
       .finally(() => {
         draftInFlight--;
+        updateBusyIndicator();
         pumpDraftQueue();
       });
   }
+  updateBusyIndicator();
 }
 
 // 1チャンクをGroqへ送信し、結果でplaceholderを置き換える。文脈(prompt)を引き継ぐ
@@ -534,9 +561,9 @@ function stopRecording() {
   dataArray = null;
   currentConversation = null; // 保存先は録音中のみ有効。停止後に届く最後のチャンクはキューが保持したIDで保存される
   releaseWakeLock();
-  micMonitor.hidden = true;
   micPickEl.classList.remove('on');
   mainWave.clear();
+  updateBusyIndicator(); // 変換待ちが残っていればモニターを残し、無ければここで消える
   updateRecordButton();
   console.log('[rec] stopped');
 }

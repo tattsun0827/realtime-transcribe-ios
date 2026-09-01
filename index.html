@@ -52,7 +52,9 @@
         <canvas id="main-wave" class="wave" width="240" height="36" aria-hidden="true"></canvas>
         <div class="mic-monitor-meta">
           <span id="mic-name" class="mic-name"></span>
-          <span id="mic-pick" class="mic-pick">🔊 拾っています</span>
+          <!-- 本文に「認識中…」と書かず、変換の進行はここだけで示す -->
+          <span id="mic-busy" class="mic-busy" hidden>変換中</span>
+          <span id="mic-pick" class="mic-pick">拾っています</span>
         </div>
       </div>
       <button id="record-btn" type="button" class="btn-record">
@@ -91,7 +93,7 @@
         <canvas id="settings-wave" class="wave" width="240" height="36" aria-hidden="true"></canvas>
         <div class="mic-monitor-meta">
           <span id="settings-mic-hint" class="mic-name">テストを押すと、ここに波形が出ます</span>
-          <span id="settings-pick" class="mic-pick">🔊 拾っています</span>
+          <span id="settings-pick" class="mic-pick">拾っています</span>
         </div>
       </div>
     </section>

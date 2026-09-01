@@ -10,6 +10,7 @@ import {
   resolveMicDeviceId,
   audioConstraints,
   waveBarHeight,
+  typingChunkSize,
 } from '../settings-core.mjs';
 
 let failures = 0;
@@ -112,6 +113,21 @@ test('波形の高さは大音量でも枠内に収まる', () => {
 
 test('波形の高さは音量に比例して伸びる', () => {
   assert.ok(waveBarHeight(0.02, 36, 1) < waveBarHeight(0.08, 36, 1));
+});
+
+test('短い文はゆっくり（1文字ずつ）流す', () => {
+  assert.equal(typingChunkSize(10, 1000, 33), 1);
+});
+
+test('長文でも決めた時間内に出し切る（流れ続けない）', () => {
+  const chunk = typingChunkSize(600, 1000, 33);
+  const frames = Math.ceil(600 / chunk);
+  assert.ok(frames * 33 <= 1000 + 33, `${frames * 33}ms かかっています`);
+});
+
+test('空文字では流す文字が無い', () => {
+  assert.equal(typingChunkSize(0, 1000, 33), 0);
+  assert.equal(typingChunkSize(-5, 1000, 33), 0);
 });
 
 if (failures > 0) {

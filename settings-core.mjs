@@ -55,6 +55,16 @@ export function audioConstraints(deviceId) {
   return { audio };
 }
 
+// 確定テキストを1フレームに何文字ずつ流すか。
+// 4〜15秒ぶんの文章が一度に現れると「止まっていて、たまに塊で出る」ように見えるため、
+// 少しずつ流して喋っている速さに近づける。ただし長文でも totalMs 以内に出し切り、
+// 次のセグメントが届く頃まで流れ続けないようにする
+export function typingChunkSize(totalChars, totalMs, frameMs) {
+  if (!(totalChars > 0)) return 0;
+  const frames = Math.max(1, Math.floor(totalMs / frameMs));
+  return Math.max(1, Math.ceil(totalChars / frames));
+}
+
 // 波形1本の高さ。声のRMSは0.02〜0.2程度に集まるので8倍して見える高さにする。
 // 無音でも最小の1本を残し、「描画が止まっている」のか「音が無い」のかを区別できるようにする
 export function waveBarHeight(rms, canvasHeight, minPx) {
