@@ -100,7 +100,7 @@ if (/MediaRecorder/.test(js) && !/audio\/mp4/.test(js)) {
 // --- 検査6: APIキーが混入していないか ---
 // このリポジトリは GitHub Pages 公開のため public。実キーが入ると即漏洩する
 const secretPattern = /gsk_[A-Za-z0-9]{20,}|sk-[A-Za-z0-9]{20,}|ghp_[A-Za-z0-9]{20,}/;
-const sourceFiles = ['app.js', 'index.html', 'style.css', 'db.mjs', 'vad-core.mjs'];
+const sourceFiles = ['app.js', 'index.html', 'style.css', 'db.mjs', 'vad-core.mjs', 'settings-core.mjs'];
 const leaked = sourceFiles.filter((f) => existsSync(join(root, f)) && secretPattern.test(read(f)));
 if (leaked.length) {
   fail(`APIキーらしき文字列が含まれています: ${leaked.join(', ')}`, 'このリポジトリは公開されています。直ちに削除してキーを再発行してください');
@@ -109,7 +109,7 @@ if (leaked.length) {
 }
 
 // --- 検査7: テストが通るか ---
-const tests = ['test/smoke-vad.mjs', 'test/smoke-db.mjs'];
+const tests = ['test/smoke-vad.mjs', 'test/smoke-db.mjs', 'test/smoke-settings.mjs'];
 for (const t of tests) {
   if (!existsSync(join(root, t))) {
     warn(`${t} が見つかりません`);
