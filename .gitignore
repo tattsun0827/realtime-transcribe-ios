@@ -1,0 +1,10 @@
+# 機密情報（自動追加）
+.env
+.env.*
+*.key
+*.pem
+*.p12
+*.pfx
+
+# 依存関係（今後npx serve等を使う場合の保険。配布物には含めない方針）
+node_modules/
