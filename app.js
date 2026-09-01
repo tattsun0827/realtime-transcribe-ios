@@ -10,10 +10,23 @@ import {
   isHallucination,
   isDuplicateOfPrevious,
 } from './vad-core.mjs';
+import {
+  WAVE_SAMPLES,
+  isValidApiKeyFormat,
+  maskApiKey,
+  selectableMicDevices,
+  micOptionLabel,
+  resolveMicDeviceId,
+  audioConstraints,
+  waveBarHeight,
+} from './settings-core.mjs';
 import { createConversation, appendSegment, listConversations, getConversation, displayTitle } from './db.mjs';
 
 const STORAGE_KEY_API = 'rt_groq_api_key';
 const STORAGE_KEY_FONT_SIZE = 'rt_font_size';
+const STORAGE_KEY_MIC = 'rt_mic_device_id';
+const WAVE_ACCENT = '#4f8cff'; // 送信対象の音量（style.css の --accent と同色）
+const WAVE_QUIET = '#3a4150'; // 送信されない小さい音
 const GROQ_ENDPOINT = 'https://api.groq.com/openai/v1/audio/transcriptions';
 const GROQ_MODEL = 'whisper-large-v3';
 const PROMPT_CONTEXT_CHARS = 200; // Groqのpromptに渡す直前確定テキストの上限（ハルシネーション対策）
@@ -43,8 +56,24 @@ const detailTitleEl = document.getElementById('detail-title');
 const detailTextEl = document.getElementById('detail-text');
 const copyDetailBtn = document.getElementById('copy-detail-btn');
 const shareDetailBtn = document.getElementById('share-detail-btn');
-const levelMeter = document.getElementById('level-meter');
-const levelMeterFill = document.getElementById('level-meter-fill');
+const micMonitor = document.getElementById('mic-monitor');
+const mainWaveCanvas = document.getElementById('main-wave');
+const micNameEl = document.getElementById('mic-name');
+const micPickEl = document.getElementById('mic-pick');
+const settingsScreen = document.getElementById('settings-screen');
+const closeSettingsBtn = document.getElementById('close-settings-btn');
+const closeSettingsFooterBtn = document.getElementById('close-settings-footer-btn');
+const keyStatusEl = document.getElementById('key-status');
+const settingsKeyInput = document.getElementById('settings-key-input');
+const settingsKeyReveal = document.getElementById('settings-key-reveal');
+const settingsSaveKeyBtn = document.getElementById('settings-save-key-btn');
+const settingsKeyMsg = document.getElementById('settings-key-msg');
+const micSelect = document.getElementById('mic-select');
+const micNote = document.getElementById('mic-note');
+const micTestBtn = document.getElementById('mic-test-btn');
+const settingsWaveCanvas = document.getElementById('settings-wave');
+const settingsMicHint = document.getElementById('settings-mic-hint');
+const settingsPickEl = document.getElementById('settings-pick');
 
 let mediaStream = null;
 let audioContext = null;
@@ -75,8 +104,8 @@ function saveApiKey(key) {
   localStorage.setItem(STORAGE_KEY_API, key);
 }
 
-// 4画面のうち1つだけを表示する
-const SCREENS = { setup: setupScreen, main: mainScreen, list: listScreen, detail: detailScreen };
+// 5画面のうち1つだけを表示する
+const SCREENS = { setup: setupScreen, main: mainScreen, list: listScreen, detail: detailScreen, settings: settingsScreen };
 function showScreen(name) {
   for (const key of Object.keys(SCREENS)) {
     SCREENS[key].hidden = key !== name;
@@ -90,7 +119,7 @@ function initScreen() {
 
 saveKeyBtn.addEventListener('click', () => {
   const value = apiKeyInput.value.trim();
-  if (!value.startsWith('gsk_')) {
+  if (!isValidApiKeyFormat(value)) {
     setupError.textContent = 'キーの形式が正しくないようです（gsk_ から始まる文字列です）';
     setupError.hidden = false;
     return;
@@ -125,11 +154,55 @@ function getVolume() {
   return Math.sqrt(sum / dataArray.length);
 }
 
-// 入力音量をバーで可視化する。「話しているのに拾えていない」を目で気づけるようにする
-function updateLevelMeter(rms) {
-  const pct = Math.min(100, rms * 400); // 会話音声のRMSは0.02〜0.25程度に集まる
-  levelMeterFill.style.width = pct + '%';
-  levelMeterFill.classList.toggle('voice', rms >= VOICE_PEAK_RMS);
+// 音量の履歴を流れる波形として描く（ACSの入力モニターと同じ見せ方）。
+// 「開始したのに拾えていない」を目で気づけるようにするための装置なので、
+// 送信対象になる音量（VOICE_PEAK_RMS以上）だけを色で立たせる。
+// canvasの内部解像度は実表示サイズ×DPRに合わせる。属性値のままだと横に伸びてぼやける
+function createWaveRenderer(canvas) {
+  const dpr = (typeof window !== 'undefined' && window.devicePixelRatio) || 1;
+  const ctx = typeof canvas.getContext === 'function' ? canvas.getContext('2d') : null;
+  const history = [];
+
+  function draw() {
+    if (!ctx) return; // canvas 2Dが無い環境（テスト用の最小DOM等）では描画だけ黙って省く
+    const wantW = Math.round((canvas.clientWidth || 240) * dpr);
+    const wantH = Math.round((canvas.clientHeight || 36) * dpr);
+    if (wantW > 0 && canvas.width !== wantW) canvas.width = wantW;
+    if (wantH > 0 && canvas.height !== wantH) canvas.height = wantH;
+    const w = canvas.width;
+    const h = canvas.height;
+    const step = w / WAVE_SAMPLES;
+    ctx.clearRect(0, 0, w, h);
+    history.forEach((rms, i) => {
+      const bh = waveBarHeight(rms, h, dpr);
+      ctx.fillStyle = rms >= VOICE_PEAK_RMS ? WAVE_ACCENT : WAVE_QUIET;
+      ctx.fillRect(i * step, (h - bh) / 2, Math.max(dpr, step - dpr), bh);
+    });
+  }
+
+  return {
+    push(rms) {
+      history.push(rms);
+      if (history.length > WAVE_SAMPLES) history.shift();
+      draw();
+    },
+    // 履歴を無音で埋め直す。左端から少しずつ伸びる描き方だと「壊れている」ように見えるので、
+    // 最初から全幅に無音の基線を出しておく
+    clear() {
+      history.length = 0;
+      for (let i = 0; i < WAVE_SAMPLES; i++) history.push(0);
+      draw();
+    },
+  };
+}
+
+const mainWave = createWaveRenderer(mainWaveCanvas);
+const settingsWave = createWaveRenderer(settingsWaveCanvas);
+
+// 録音中の入力モニターを更新する（波形＋「🔊 拾っています」）
+function updateMicMonitor(rms) {
+  mainWave.push(rms);
+  micPickEl.classList.toggle('on', rms >= VOICE_PEAK_RMS);
 }
 
 // 「認識中…」のグレー表示を追加し、その要素を返す（Groq応答が来たら確定テキストに置き換える）
@@ -303,7 +376,7 @@ function recordDraftSegment() {
     const elapsed = now - recordingStartMs - segmentStartMs;
     const rms = getVolume();
     if (rms > peakRms) peakRms = rms;
-    updateLevelMeter(rms);
+    updateMicMonitor(rms);
     const decision = shouldStopSegment({ rms, silenceStartedAt, now, elapsed });
     silenceStartedAt = nextSilenceStartedAt({ rms, silenceStartedAt, now });
     if (decision.stop) {
@@ -333,16 +406,37 @@ function releaseWakeLock() {
   wakeLock = null;
 }
 
+// 設定で選ばれたマイクのdeviceIdを取り出す（未設定・保存不可なら空文字＝既定のマイク）
+function loadMicDeviceId() {
+  try {
+    return localStorage.getItem(STORAGE_KEY_MIC) || '';
+  } catch {
+    return '';
+  }
+}
+
+// 指定のマイクでストリームを開く。選んだマイクが外れている等で開けなければ既定のマイクへ落とす
+// （exact指定のまま失敗させると、録音そのものが始められなくなるため）
+async function openMicStream(deviceId) {
+  try {
+    return await navigator.mediaDevices.getUserMedia(audioConstraints(deviceId));
+  } catch (err) {
+    if (!deviceId) throw err;
+    console.warn('[mic] 指定マイクを開けないため既定のマイクで開きます', err);
+    return navigator.mediaDevices.getUserMedia(audioConstraints(''));
+  }
+}
+
+// 実際に開いたマイクの名前を返す（許可前は空になるので、その時は「マイク」とだけ表示する）
+function streamMicLabel(stream) {
+  const track = stream && stream.getAudioTracks ? stream.getAudioTracks()[0] : null;
+  return (track && track.label) || 'マイク';
+}
+
 async function startRecording() {
-  // ノイズ抑制・エコー除去・自動ゲインは認識精度に直結するため明示的に有効化する
-  mediaStream = await navigator.mediaDevices.getUserMedia({
-    audio: {
-      echoCancellation: true,
-      noiseSuppression: true,
-      autoGainControl: true,
-      channelCount: 1,
-    },
-  });
+  // 入力元は設定で選べる。制約（ノイズ抑制等）は audioConstraints() が持つ
+  mediaStream = await openMicStream(loadMicDeviceId());
+  micNameEl.textContent = streamMicLabel(mediaStream);
 
   audioContext = new AudioContext();
   const source = audioContext.createMediaStreamSource(mediaStream);
@@ -358,7 +452,8 @@ async function startRecording() {
   rateLimited = false;
   recording = true;
   currentConversation = await createConversation();
-  levelMeter.hidden = false;
+  micMonitor.hidden = false;
+  mainWave.clear();
   await acquireWakeLock();
   updateRecordButton();
   recordDraftSegment();
@@ -388,8 +483,9 @@ function stopRecording() {
   dataArray = null;
   currentConversation = null; // 保存先は録音中のみ有効。停止後に届く最後のチャンクはキューが保持したIDで保存される
   releaseWakeLock();
-  levelMeter.hidden = true;
-  updateLevelMeter(0);
+  micMonitor.hidden = true;
+  micPickEl.classList.remove('on');
+  mainWave.clear();
   updateRecordButton();
   console.log('[rec] stopped');
 }
@@ -419,15 +515,182 @@ recordBtn.addEventListener('click', () => {
   });
 });
 
-// APIキーの再設定（本格的な設定画面はStep4以降。今はキー変更のみ）
-openSettingsBtn.addEventListener('click', () => {
-  const ok = confirm('Groq APIキーを削除して入力し直しますか？');
-  if (!ok) return;
+// ---- 設定画面 ----
+// キーは「削除して入力し直す」のではなく、この画面で新しい値を上書き保存する。
+// 削除方式は、入れ直しに失敗すると使えない状態のまま取り残されるので採らない。
+
+let micTestStream = null; // マイクテスト中のストリーム（テスト停止・画面を閉じた時に必ず止める）
+let micTestContext = null;
+let micTestAnalyser = null;
+let micTestData = null;
+let micTestTimer = null;
+
+// 保存済みキーの有無を伏せ字で示す
+function renderKeyStatus() {
+  const masked = maskApiKey(loadApiKey());
+  keyStatusEl.textContent = masked ? `現在のキー: ${masked}` : 'キーは未設定です';
+  keyStatusEl.classList.toggle('unset', !masked);
+}
+
+// 接続中のマイクを選択肢に並べる。名前はマイクの使用を許可するまで空で返るため、その旨を案内する
+async function renderMicDevices() {
+  const saved = loadMicDeviceId();
+  micSelect.textContent = '';
+  const defaultOption = document.createElement('option');
+  defaultOption.value = '';
+  defaultOption.textContent = '既定のマイク';
+  micSelect.appendChild(defaultOption);
+
+  let devices = [];
   try {
-    localStorage.removeItem(STORAGE_KEY_API);
-  } catch { /* 無視 */ }
-  apiKeyInput.value = '';
-  initScreen();
+    devices = await navigator.mediaDevices.enumerateDevices();
+  } catch (err) {
+    console.warn('[mic] enumerateDevices failed', err);
+    micNote.textContent = 'マイクの一覧を取得できませんでした。「既定のマイク」で録音できます。';
+    return;
+  }
+
+  const inputs = selectableMicDevices(devices);
+  inputs.forEach((d, i) => {
+    const option = document.createElement('option');
+    option.value = d.deviceId;
+    option.textContent = micOptionLabel(d, i);
+    micSelect.appendChild(option);
+  });
+
+  // 外したマイクのIDが残っていると exact 指定で録音が始められないので、その場で既定へ戻す
+  const resolved = resolveMicDeviceId(saved, devices);
+  if (resolved !== saved) saveMicDeviceId(resolved);
+  micSelect.value = resolved;
+
+  if (!inputs.length) {
+    micNote.textContent = 'マイクが見つかりません。端末に接続してから「マイクをテスト」を押してください。';
+  } else if (inputs.some((d) => !d.label)) {
+    micNote.textContent = 'マイクの名前は、「マイクをテスト」で使用を許可すると表示されます。';
+  } else {
+    micNote.textContent = `接続中のマイク: ${inputs.length}台`;
+  }
+}
+
+function saveMicDeviceId(deviceId) {
+  try {
+    localStorage.setItem(STORAGE_KEY_MIC, deviceId);
+  } catch { /* 保存できなくても既定のマイクで動く */ }
+}
+
+// マイクテストを止めて後始末する。画面を閉じる時にも必ず通す（マイクを掴んだままにしない）
+function stopMicTest() {
+  clearTimeout(micTestTimer);
+  micTestTimer = null;
+  if (micTestStream) {
+    micTestStream.getTracks().forEach((t) => t.stop());
+    micTestStream = null;
+  }
+  if (micTestContext) {
+    try { micTestContext.close(); } catch { /* 無視 */ }
+    micTestContext = null;
+  }
+  micTestAnalyser = null;
+  micTestData = null;
+  settingsWave.clear();
+  settingsPickEl.classList.remove('on');
+  micTestBtn.textContent = 'マイクをテスト';
+  settingsMicHint.textContent = 'テストを押すと、ここに波形が出ます';
+}
+
+async function startMicTest() {
+  micTestStream = await openMicStream(micSelect.value);
+  micTestContext = new AudioContext();
+  const source = micTestContext.createMediaStreamSource(micTestStream);
+  micTestAnalyser = micTestContext.createAnalyser();
+  micTestAnalyser.fftSize = 512;
+  micTestData = new Float32Array(micTestAnalyser.fftSize);
+  source.connect(micTestAnalyser);
+  micTestBtn.textContent = 'テストを停止';
+  settingsMicHint.textContent = streamMicLabel(micTestStream);
+  settingsWave.clear();
+  // 許可した直後は名前が取れるようになるので、一覧を作り直す
+  await renderMicDevices();
+  micSelect.value = loadMicDeviceId();
+
+  const tick = () => {
+    if (!micTestAnalyser || !micTestData) return;
+    micTestAnalyser.getFloatTimeDomainData(micTestData);
+    let sum = 0;
+    for (let i = 0; i < micTestData.length; i++) sum += micTestData[i] * micTestData[i];
+    const rms = Math.sqrt(sum / micTestData.length);
+    settingsWave.push(rms);
+    settingsPickEl.classList.toggle('on', rms >= VOICE_PEAK_RMS);
+    micTestTimer = setTimeout(tick, 100);
+  };
+  tick();
+}
+
+async function openSettings() {
+  renderKeyStatus();
+  settingsKeyInput.value = '';
+  settingsKeyMsg.hidden = true;
+  showScreen('settings');
+  await renderMicDevices();
+}
+
+function closeSettings() {
+  stopMicTest();
+  showScreen('main');
+}
+
+openSettingsBtn.addEventListener('click', () => {
+  openSettings().catch((err) => console.error('[settings] open failed', err));
+});
+
+closeSettingsBtn.addEventListener('click', closeSettings);
+closeSettingsFooterBtn.addEventListener('click', closeSettings);
+
+settingsKeyReveal.addEventListener('change', () => {
+  settingsKeyInput.type = settingsKeyReveal.checked ? 'text' : 'password';
+});
+
+settingsSaveKeyBtn.addEventListener('click', () => {
+  const value = settingsKeyInput.value.trim();
+  settingsKeyMsg.hidden = false;
+  if (!isValidApiKeyFormat(value)) {
+    settingsKeyMsg.textContent = 'キーの形式が正しくないようです（gsk_ から始まる文字列です）';
+    settingsKeyMsg.className = 'settings-msg error';
+    return;
+  }
+  saveApiKey(value);
+  rateLimited = false; // 無効キーで止めていた場合、新しいキーで再開できるようにする
+  mainError.hidden = true;
+  settingsKeyInput.value = '';
+  settingsKeyReveal.checked = false;
+  settingsKeyInput.type = 'password';
+  settingsKeyMsg.textContent = 'キーを保存しました';
+  settingsKeyMsg.className = 'settings-msg ok';
+  renderKeyStatus();
+});
+
+micSelect.addEventListener('change', () => {
+  saveMicDeviceId(micSelect.value);
+  if (micTestStream) {
+    // テスト中に切り替えたら、新しいマイクで開き直して即座に確かめられるようにする
+    stopMicTest();
+    startMicTest().catch((err) => {
+      settingsMicHint.textContent = `このマイクを開けませんでした: ${err.message}`;
+      stopMicTest();
+    });
+  }
+});
+
+micTestBtn.addEventListener('click', () => {
+  if (micTestStream) {
+    stopMicTest();
+    return;
+  }
+  startMicTest().catch((err) => {
+    console.error('[mic] test failed', err);
+    stopMicTest();
+    settingsMicHint.textContent = `マイクを開けませんでした: ${err.message}`;
+  });
 });
 
 // 会話の全文を1つの文字列にする（コピー・共有・詳細表示で共用）

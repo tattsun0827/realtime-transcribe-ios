@@ -18,12 +18,14 @@ node scripts/verify.mjs
 
 | ファイル | 役割 |
 |---|---|
-| `index.html` | 4画面のマークアップ（キー設定・メイン・会話一覧・会話詳細） |
-| `app.js` | 録音・VAD・Groq送信・画面遷移（ESモジュール） |
+| `index.html` | 5画面のマークアップ（キー設定・メイン・会話一覧・会話詳細・設定） |
+| `app.js` | 録音・VAD・Groq送信・画面遷移・設定画面（ESモジュール） |
 | `vad-core.mjs` | 無音判定・整形・幻聴フィルタ（純粋関数のみ） |
+| `settings-core.mjs` | キー形式・伏せ字・マイク一覧・音声制約・波形の高さ（純粋関数のみ） |
 | `db.mjs` | IndexedDB読み書き＋ID/タイトル生成 |
 | `test/smoke-vad.mjs` | VAD・整形の検証（19件） |
 | `test/smoke-db.mjs` | 保存まわりの純粋関数の検証（9件） |
+| `test/smoke-settings.mjs` | 設定まわりの純粋関数の検証（17件） |
 | `scripts/verify.mjs` | 上記の検査 |
 
 ## ローカルで起動

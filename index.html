@@ -47,13 +47,58 @@
 
   <footer class="record-bar">
     <div class="record-controls">
-      <div id="level-meter" class="level-meter" hidden aria-hidden="true">
-        <div id="level-meter-fill" class="level-meter-fill"></div>
+      <!-- 録音中の入力モニター。「話しているのに拾えていない」を目で気づけるようにする -->
+      <div id="mic-monitor" class="mic-monitor" hidden>
+        <canvas id="main-wave" class="wave" width="240" height="36" aria-hidden="true"></canvas>
+        <div class="mic-monitor-meta">
+          <span id="mic-name" class="mic-name"></span>
+          <span id="mic-pick" class="mic-pick">🔊 拾っています</span>
+        </div>
       </div>
       <button id="record-btn" type="button" class="btn-record">
         <span id="record-btn-label">録音開始</span>
       </button>
     </div>
+  </footer>
+</section>
+
+<!-- 画面5: 設定（APIキーの入れ替えとマイク入力元の選択） -->
+<section id="settings-screen" class="screen" hidden>
+  <header class="toolbar">
+    <span class="toolbar-spacer" aria-hidden="true"></span>
+    <h1 class="toolbar-title">設定</h1>
+    <button id="close-settings-btn" type="button" class="btn-icon" aria-label="閉じる">✕</button>
+  </header>
+
+  <div class="settings-body">
+    <section class="settings-group">
+      <h2>Groq APIキー</h2>
+      <p id="key-status" class="settings-status"></p>
+      <input id="settings-key-input" type="password" autocomplete="off" placeholder="gsk_...">
+      <label class="checkbox-row"><input id="settings-key-reveal" type="checkbox"> 入力したキーを表示する</label>
+      <button id="settings-save-key-btn" type="button" class="btn-primary">キーを保存</button>
+      <p id="settings-key-msg" class="settings-msg" hidden></p>
+      <p class="settings-note">キーはこの端末の中だけに保存され、Groq以外へは送信されません。新しいキーは
+        <a href="https://console.groq.com/keys" target="_blank" rel="noopener">console.groq.com/keys</a> で発行できます。</p>
+    </section>
+
+    <section class="settings-group">
+      <h2>マイク入力元</h2>
+      <select id="mic-select" class="settings-select"></select>
+      <p id="mic-note" class="settings-note">マイクの名前は、一度マイクの使用を許可すると表示されます。</p>
+      <button id="mic-test-btn" type="button" class="btn-secondary btn-block">マイクをテスト</button>
+      <div class="mic-monitor">
+        <canvas id="settings-wave" class="wave" width="240" height="36" aria-hidden="true"></canvas>
+        <div class="mic-monitor-meta">
+          <span id="settings-mic-hint" class="mic-name">テストを押すと、ここに波形が出ます</span>
+          <span id="settings-pick" class="mic-pick">🔊 拾っています</span>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <footer class="record-bar">
+    <button id="close-settings-footer-btn" type="button" class="btn-secondary btn-block">閉じる</button>
   </footer>
 </section>
 
