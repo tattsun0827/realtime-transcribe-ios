@@ -1,29 +1,25 @@
-# HANDOFF — 次セッションへの明確な指示
-
+# HANDOFF — まずこれを読む
 最終更新: 2026-09-01
-プロジェクト: realtime-transcribe-ios
 
-## 引き継ぎ時に読むファイルの順序
-HANDOFF.md → state.json → 設計図/2026-09-01_realtime-transcribe-ios.md
+## 読む順序
+1. このHANDOFF.md  2. state.json  3. 必要時のみ SESSION_LOG.md
 
 ## いま何をしているか（1行）
-Step1（walking skeleton）実装済み・GitHub Pagesで公開済み。iPhone実機での最終確認待ち。
+Step0〜4 完了・GitHub Pages 公開中。残るは Step5（PWA化）のみで、実機での保存機能の確認は未実施。
 
-## 次にやること（ユーザー本人の作業）
-- やること: iPhoneのSafariで https://tattsun0827.github.io/realtime-transcribe-ios/ を開き、Groq実APIキーを入力→録音→文字が表示されるか確認
-- 想定リスク: (1)GroqのCORSがブラウザ直叩きを許すか未検証 (2)iOS Safariのaudio/mp4チャンクが単体デコード可能か未検証（設計図の最大リスク仮定1・2）。ダメならCloudflare Worker中継へ切替
-- 完了したら「Step完了」と発話 → step-completeでタグstep-1-done・Step2着手
+## 次にやること（Step 1）
+ユーザーに iPhone で https://tattsun0827.github.io/realtime-transcribe-ios/?t=<現在のunix時刻> を開いてもらい、
+録音→自動保存→☰から一覧・詳細が見えるかを確認する。問題なければ Step5（manifest.json＋アイコン＋Service Worker）へ。
+改修前に必ず `node scripts/verify.mjs` を通す（7項目・数秒）。
 
-## このセッションで記録した実物（参照）
-- 設計図/2026-09-01_realtime-transcribe-ios.md: 全Step詳細・技術選定・NFR・地雷リスト
-- index.html/app.js/style.css/test/smoke-groq.mjs: Step1実装一式
-- GitHub: https://github.com/tattsun0827/realtime-transcribe-ios（public・Pages公開中）
-- 公開URL: https://tattsun0827.github.io/realtime-transcribe-ios/
-- 発見・修正済みバグ: `.screen[hidden]`未定義でCSS特異性衝突により2画面が重なる不具合（style.cssで対処済み）
+## 蒸し返し禁止（前提・再調査しない）
+- 運用・改修の正本は `~/.claude/skills/realtime-transcribe-app/SKILL.md`。落とし穴と「触ってはいけない箇所」はそこ
+- VAD定数・並列数3・表示順の担保方法（先行挿入したプレースホルダー）・会話IDをキュー投入時に確定させる設計は変えない
+- iOS は audio/webm 非対応（mp4のみ）／マイクは HTTPS か localhost のみ／背景録音は不可（Wake Lockで代替）
+- Groq 無料枠で先に尽きるのは RPD 2000（回数）。無音は送らない
+- 「直したのに反映されない」はまずGitHub Pagesのビルド待ち（30〜60秒）とキャッシュ（10分）を疑う
+- ネイティブアプリ化（App Store・開発者登録）は不採用
 
-## ユーザーの好み（重要なら抜粋）
-- 散文・敬体・アスタリスク強調なし・無駄な承認要求を嫌う
-- 詳細: `~/.claude/memory/USER_PROFILE.md`
-
-## 緊急ロールバック方法
-- `git log --oneline` で履歴 → `git checkout <hash> -- <path>` で復元
+## 応答テンプレ（このまま出す）
+状態: Step0〜4完了・Pages公開中／残りはStep5(PWA化)のみ／実機での保存機能の確認が未実施
+次: iPhoneで公開URLを開き録音→自動保存→一覧表示を確認 → 問題なければStep5へ（改修前に node scripts/verify.mjs）

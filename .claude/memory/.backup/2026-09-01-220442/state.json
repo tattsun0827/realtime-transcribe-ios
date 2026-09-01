@@ -1,0 +1,18 @@
+{
+  "project": "realtime-transcribe-ios（iPhone/iPad向けリアルタイム文字起こしPWA）",
+  "phase": "complete",
+  "session": 1,
+  "current_step": 5,
+  "total_steps": 5,
+  "completed_steps": ["step_0", "step_1", "step_2", "step_3", "step_4"],
+  "blocked": false,
+  "blocked_reason": "",
+  "branch": "master",
+  "remote": "https://github.com/tattsun0827/realtime-transcribe-ios (public)",
+  "pages_url": "https://tattsun0827.github.io/realtime-transcribe-ios/",
+  "skill": "~/.claude/skills/realtime-transcribe-app/SKILL.md（運用・改修の正本）",
+  "verify_command": "node scripts/verify.mjs（変更したら必ず通す・7項目）",
+  "next_command": "残るのはStep5（PWA化: manifest.json＋アイコン＋Service Worker）。ホーム画面追加時に全画面起動させたくなったら着手する",
+  "plan_doc": "設計図/2026-09-01_realtime-transcribe-ios.md",
+  "last_saved": "2026-09-01T13:05:00.000Z"
+}
