@@ -2,15 +2,15 @@
   "project": "realtime-transcribe-ios（iPhone/iPad向けリアルタイム文字起こしPWA）",
   "phase": "implement",
   "session": 1,
-  "current_step": 2,
+  "current_step": 3,
   "total_steps": 5,
-  "completed_steps": ["step_0", "step_1"],
+  "completed_steps": ["step_0", "step_1", "step_2"],
   "blocked": false,
   "blocked_reason": "",
   "branch": "master",
   "remote": "https://github.com/tattsun0827/realtime-transcribe-ios (public)",
   "pages_url": "https://tattsun0827.github.io/realtime-transcribe-ios/",
-  "next_command": "ユーザーのiPhoneスクリーンショットでStep2のリアルタイム表示（逐次確定テキスト）は動作確認済み。文字サイズ変更（Step3の一部）も実装・確認済み。正式な「Step完了」発話はまだ無いため、次にユーザーから来たらstep-completeでstep-2-doneタグを打つ。残りはStep3のWake Lock（画面消灯防止）",
+  "next_command": "フォントサイズ上限を拡張（Step3残り）＋会話の逐次自動保存・一覧・詳細（Step4）を実装中。Wake Lockはユーザー未要求のため未着手",
   "plan_doc": "設計図/2026-09-01_realtime-transcribe-ios.md",
-  "last_saved": "2026-09-01T12:30:00.000Z"
+  "last_saved": "2026-09-01T12:40:00.000Z"
 }
