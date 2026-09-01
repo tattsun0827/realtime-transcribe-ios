@@ -46,9 +46,38 @@
   <p id="main-error" class="error" hidden></p>
 
   <footer class="record-bar">
-    <button id="record-btn" type="button" class="btn-record">
-      <span id="record-btn-label">録音開始</span>
-    </button>
+    <div class="record-controls">
+      <div id="level-meter" class="level-meter" hidden aria-hidden="true">
+        <div id="level-meter-fill" class="level-meter-fill"></div>
+      </div>
+      <button id="record-btn" type="button" class="btn-record">
+        <span id="record-btn-label">録音開始</span>
+      </button>
+    </div>
+  </footer>
+</section>
+
+<!-- 画面3: 会話一覧 -->
+<section id="list-screen" class="screen" hidden>
+  <header class="toolbar">
+    <button id="back-from-list-btn" type="button" class="btn-icon" aria-label="戻る">←</button>
+    <h1 class="toolbar-title">会話一覧</h1>
+    <span class="toolbar-spacer" aria-hidden="true"></span>
+  </header>
+  <div id="conversation-list" class="conversation-list"></div>
+</section>
+
+<!-- 画面4: 会話詳細 -->
+<section id="detail-screen" class="screen" hidden>
+  <header class="toolbar">
+    <button id="back-from-detail-btn" type="button" class="btn-icon" aria-label="戻る">←</button>
+    <h1 id="detail-title" class="toolbar-title">会話</h1>
+    <span class="toolbar-spacer" aria-hidden="true"></span>
+  </header>
+  <div id="detail-text" class="transcript"></div>
+  <footer class="record-bar detail-actions">
+    <button id="copy-detail-btn" type="button" class="btn-secondary">📋 コピー</button>
+    <button id="share-detail-btn" type="button" class="btn-secondary" hidden>共有</button>
   </footer>
 </section>
 
