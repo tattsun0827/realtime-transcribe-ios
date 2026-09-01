@@ -80,8 +80,14 @@ let audioContext = null;
 let analyser = null;
 let dataArray = null;
 let recording = false;
+let starting = false; // startRecording()の実行中フラグ。マイク許可待ちの連打で二重に走らせない
 let recordingStartMs = 0;
 let draftTimer = null; // VAD監視ループのタイマー
+// 区切りの「世代」。停止・復旧のたびに増やし、古いセグメントの監視ループとonstopを無効化する。
+// これが無いと、復旧のたびに監視ループが増殖して同じ音声を二重に送ってしまう
+let segmentGeneration = 0;
+let lastWatchTickMs = 0; // 監視ループが最後に生きていた時刻（番犬の判定に使う）
+let watchdogTimer = null;
 let draftQueue = []; // { blob, placeholder, conversationId } の処理待ちキュー
 let draftInFlight = 0; // Groqへ送信中の件数
 let contextText = ''; // 直前の確定テキスト（Groqのpromptへ渡す文脈）
@@ -328,6 +334,7 @@ async function sendChunkToGroq(blob, placeholder, conversationId) {
 // VADで無音を検知するたびに録音を区切り、次のセグメントを即座に開始する（ギャップ最小化）
 function recordDraftSegment() {
   if (!recording || !mediaStream) return;
+  const gen = segmentGeneration; // この区切りが属する世代。世代が進んだら自分は黙って退場する
   const mimeType = pickMimeType();
   let rec;
   try {
@@ -348,7 +355,7 @@ function recordDraftSegment() {
   };
   rec.onstop = () => {
     activeRecorders.delete(rec);
-    if (recording) recordDraftSegment();
+    if (recording && gen === segmentGeneration) recordDraftSegment();
     const blob = new Blob(chunks, { type: rec.mimeType || 'audio/webm' });
     if (blob.size < 3000) return; // ほぼ無音のセグメントは送らない
     // 音声区間ゲート: セグメント中に一度も発話音量へ達していなければ送らない。
@@ -371,8 +378,9 @@ function recordDraftSegment() {
   rec.start();
 
   const watch = () => {
-    if (!recording || rec.state !== 'recording') return;
+    if (!recording || gen !== segmentGeneration || rec.state !== 'recording') return;
     const now = performance.now();
+    lastWatchTickMs = now; // 番犬へ「まだ生きている」と知らせる
     const elapsed = now - recordingStartMs - segmentStartMs;
     const rms = getVolume();
     if (rms > peakRms) peakRms = rms;
@@ -386,6 +394,43 @@ function recordDraftSegment() {
     draftTimer = setTimeout(watch, 100);
   };
   watch();
+}
+
+// AudioContextが止まっていると音量が常に0になり、発話が含まれていても「無音セグメント」として
+// 全部捨てられ、一文字も出ないまま録音だけが続く。iOSはawaitを挟むとユーザー操作の権利が切れて
+// suspendedのまま生まれ、タブを離れるとinterruptedになるため、要所ごとに起こし直す
+async function resumeAudioContext() {
+  if (!audioContext || audioContext.state === 'running') return;
+  try {
+    await audioContext.resume();
+  } catch (err) {
+    console.warn('[audio] resume failed', err);
+  }
+}
+
+// 監視ループの番犬。iOSの中断などでMediaRecorderがpausedになると監視ループは静かに終わり、
+// 「録音中の表示のまま何も出ない」状態で固まる。2秒ごとに生存を確かめ、途切れていたら区切り直す
+function startWatchdog() {
+  stopWatchdog();
+  lastWatchTickMs = performance.now();
+  watchdogTimer = setInterval(() => {
+    if (!recording) return;
+    resumeAudioContext();
+    if (performance.now() - lastWatchTickMs < 3000) return;
+    console.warn('[rec] 監視が途切れたため区切りを取り直します');
+    segmentGeneration++; // 古い監視ループとonstopを無効化してから作り直す（二重起動の防止）
+    activeRecorders.forEach((r) => {
+      try { if (r.state !== 'inactive') r.stop(); } catch { /* 無視 */ }
+    });
+    activeRecorders.clear();
+    lastWatchTickMs = performance.now();
+    recordDraftSegment();
+  }, 2000);
+}
+
+function stopWatchdog() {
+  clearInterval(watchdogTimer);
+  watchdogTimer = null;
 }
 
 // 録音中に画面が消えると録音も止まるため、Wake Lockで画面を点けたままにする。
@@ -439,6 +484,7 @@ async function startRecording() {
   micNameEl.textContent = streamMicLabel(mediaStream);
 
   audioContext = new AudioContext();
+  await resumeAudioContext(); // suspendedのまま進むと全セグメントが無音扱いで捨てられる
   const source = audioContext.createMediaStreamSource(mediaStream);
   analyser = audioContext.createAnalyser();
   analyser.fftSize = 512;
@@ -451,11 +497,13 @@ async function startRecording() {
   draftInFlight = 0;
   rateLimited = false;
   recording = true;
+  segmentGeneration++; // 前回の録音に属する監視ループが残っていても、ここで確実に無効化する
   currentConversation = await createConversation();
   micMonitor.hidden = false;
   mainWave.clear();
   await acquireWakeLock();
   updateRecordButton();
+  startWatchdog();
   recordDraftSegment();
   console.log('[rec] started (VAD mode)', { mimeType: pickMimeType(), conversationId: currentConversation.id });
 }
@@ -465,6 +513,9 @@ async function startRecording() {
 // （逆順だとcloseの自動停止でonstopが来ず最後のチャンクを失う）
 function stopRecording() {
   recording = false; // 先に落としてonstopからの再入（次セグメント開始）を防ぐ
+  segmentGeneration++; // 生き残っている監視ループ・onstopをまとめて無効化する
+  stopWatchdog();
+  starting = false;
   activeRecorders.forEach((r) => {
     try { if (r.state !== 'inactive') r.stop(); } catch { /* 無視 */ }
   });
@@ -490,29 +541,45 @@ function stopRecording() {
   console.log('[rec] stopped');
 }
 
-// iOSでタブを離れるとWake Lockは自動解放される。戻ってきて録音中なら取り直す
+// iOSでタブを離れるとWake Lockは自動解放され、AudioContextも中断される。
+// 戻ってきて録音中なら両方とも取り直す（AudioContextを起こし忘れると以降ずっと無音扱いになる）
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible' && recording && !wakeLock) {
-    acquireWakeLock();
-  }
+  if (document.visibilityState !== 'visible' || !recording) return;
+  if (!wakeLock) acquireWakeLock();
+  resumeAudioContext();
 });
 
 function updateRecordButton() {
   recordBtn.classList.toggle('recording', recording);
+  if (starting && !recording) {
+    recordBtnLabel.textContent = 'マイクを準備中…';
+    return;
+  }
   recordBtnLabel.textContent = recording ? '録音停止' : '録音開始';
 }
 
 recordBtn.addEventListener('click', () => {
+  // マイク許可のダイアログが出ている間の連打を無視する。ここを素通りさせると
+  // ストリーム・AudioContext・監視ループが二重に走り、同じ声が2回文字になる
+  if (starting) return;
   if (recording) {
     stopRecording();
     return;
   }
   mainError.hidden = true;
-  startRecording().catch((err) => {
-    mainError.textContent = `マイクを開始できませんでした: ${err.message}`;
-    mainError.hidden = false;
-    console.error('[rec] start failed', err);
-  });
+  starting = true;
+  updateRecordButton();
+  startRecording()
+    .catch((err) => {
+      mainError.textContent = `マイクを開始できませんでした: ${err.message}`;
+      mainError.hidden = false;
+      console.error('[rec] start failed', err);
+      stopRecording(); // 途中まで開いたマイク・AudioContextを掴んだままにしない
+    })
+    .finally(() => {
+      starting = false;
+      updateRecordButton();
+    });
 });
 
 // ---- 設定画面 ----

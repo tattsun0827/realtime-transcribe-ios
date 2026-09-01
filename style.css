@@ -114,6 +114,22 @@ body {
   line-height: 1.9;
   white-space: pre-wrap;
   word-break: break-word;
+  /* PCの広い画面で本文が端から端まで伸びると読みにくいので、中央の読める幅に収める */
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+/* 何も録っていない間は一面の黒になり「壊れている」ように見えるため、次にすることを書いておく。
+   本文の文字サイズ(最大64px)を継がせると案内文だけ巨大になるので、ここは固定サイズにする */
+#transcript:empty::before {
+  content: '「録音開始」を押すと、ここに文字が出ます';
+  display: block;
+  font-size: 15px;
+  line-height: 1.8;
+  color: var(--muted);
+  text-align: center;
+  padding-top: 24px;
 }
 
 .transcript .seg-draft { color: var(--muted); font-style: italic; }
