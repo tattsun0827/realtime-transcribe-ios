@@ -97,7 +97,14 @@ body {
   min-height: 44px;
 }
 
-.font-controls { display: flex; gap: 6px; }
+.font-controls { display: flex; align-items: center; gap: 6px; }
+
+.font-size-label {
+  min-width: 3.5em;
+  text-align: center;
+  font-size: 13px;
+  color: var(--muted);
+}
 
 .transcript {
   flex: 1;

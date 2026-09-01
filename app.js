@@ -3,9 +3,12 @@
 import { MAX_DRAFT_QUEUE, shouldStopSegment, nextSilenceStartedAt, normalizeTranscript } from './vad-core.mjs';
 
 const STORAGE_KEY_API = 'rt_groq_api_key';
+const STORAGE_KEY_FONT_SIZE = 'rt_font_size';
 const GROQ_ENDPOINT = 'https://api.groq.com/openai/v1/audio/transcriptions';
 const GROQ_MODEL = 'whisper-large-v3';
 const PROMPT_CONTEXT_CHARS = 200; // Groqのpromptに渡す直前確定テキストの上限（ハルシネーション対策）
+const FONT_SIZES = [16, 18, 20, 24, 28, 32, 36]; // px段階
+const DEFAULT_FONT_SIZE = 20;
 
 const setupScreen = document.getElementById('setup-screen');
 const mainScreen = document.getElementById('main-screen');
@@ -18,6 +21,9 @@ const transcriptEl = document.getElementById('transcript');
 const mainError = document.getElementById('main-error');
 const openSettingsBtn = document.getElementById('open-settings-btn');
 const openListBtn = document.getElementById('open-list-btn');
+const fontSmallerBtn = document.getElementById('font-smaller-btn');
+const fontLargerBtn = document.getElementById('font-larger-btn');
+const fontSizeLabel = document.getElementById('font-size-label');
 
 let mediaStream = null;
 let audioContext = null;
@@ -307,6 +313,41 @@ openSettingsBtn.addEventListener('click', () => {
 // 会話一覧はStep4で実装予定。今は未実装であることを明示する
 openListBtn.addEventListener('click', () => {
   alert('会話の保存・一覧はまだ実装していません（次のStepで追加予定です）');
+});
+
+// 保存済みの文字サイズを取得する（無ければ既定値）
+function loadFontSize() {
+  try {
+    const saved = Number(localStorage.getItem(STORAGE_KEY_FONT_SIZE));
+    if (FONT_SIZES.includes(saved)) return saved;
+  } catch { /* 無視 */ }
+  return DEFAULT_FONT_SIZE;
+}
+
+// 文字サイズを表示エリアに反映し、ラベル表示とlocalStorage保存を行う
+function applyFontSize(px) {
+  transcriptEl.style.setProperty('--font-size', px + 'px');
+  fontSizeLabel.textContent = px + 'px';
+  try {
+    localStorage.setItem(STORAGE_KEY_FONT_SIZE, String(px));
+  } catch { /* 無視 */ }
+}
+
+let currentFontSize = loadFontSize();
+applyFontSize(currentFontSize);
+
+fontSmallerBtn.addEventListener('click', () => {
+  const idx = FONT_SIZES.indexOf(currentFontSize);
+  if (idx <= 0) return;
+  currentFontSize = FONT_SIZES[idx - 1];
+  applyFontSize(currentFontSize);
+});
+
+fontLargerBtn.addEventListener('click', () => {
+  const idx = FONT_SIZES.indexOf(currentFontSize);
+  if (idx === -1 || idx >= FONT_SIZES.length - 1) return;
+  currentFontSize = FONT_SIZES[idx + 1];
+  applyFontSize(currentFontSize);
 });
 
 initScreen();
