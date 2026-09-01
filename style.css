@@ -54,6 +54,27 @@ button, .toolbar { user-select: none; -webkit-user-select: none; }
 #setup-screen h1 { font-size: 22px; margin: 0 0 4px; letter-spacing: 0.01em; }
 .lead { color: var(--muted); font-size: 14px; line-height: 1.7; margin: 0; }
 
+/* キー保存済みのときに出す一行。入力欄より先に「済んでいる」ことが分かるよう太めに出す */
+.setup-status {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 14px 16px;
+}
+.setup-status.unset { color: var(--muted); font-weight: 400; }
+
+/* 取得手順・入力欄・保存ボタンの一式。親の #setup-screen と同じ間隔を内側でも保つ */
+.setup-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.setup-form[hidden] { display: none; }
+
 .howto {
   background: var(--surface);
   border: 1px solid var(--border);

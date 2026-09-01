@@ -19,6 +19,15 @@ export function maskApiKey(key) {
   return `${value.slice(0, 4)}…${value.slice(-4)}`;
 }
 
+// 保存済みキーの状態を、画面にそのまま出せる形で返す。
+// 「毎回キーを聞かれる」と感じさせないため、キーがあるときは入力欄ではなく保存済みの事実を先に見せる。
+// saved が false のときだけ入力欄と保存ボタンを出す（呼び出し側はこの2値で表示を切り替える）
+export function savedKeyStatus(key) {
+  const masked = maskApiKey(key);
+  if (!masked) return { saved: false, label: 'キーは未設定です' };
+  return { saved: true, label: `保存済み（${masked}）` };
+}
+
 // マイク一覧から選択肢に出す分だけを取り出す。
 // ブラウザは同じ物理マイクを default / communications という別名でも返すため、
 // 「既定のマイク」と重複しないよう除外する（ACS の loadMicDevices と同じ方針）

@@ -9,23 +9,33 @@
 <body>
 
 <!-- 画面1: 初回のみ表示するAPIキー設定画面 -->
-<section id="setup-screen" class="screen">
+<!-- hidden を最初から付けておく。付いていないと app.js（type="module"＝遅延実行）が走るまでの間、
+     キー保存済みの人にもこの画面が一瞬映り、「毎回キーを聞かれる」ように見える -->
+<section id="setup-screen" class="screen" hidden>
   <h1>Groq APIキーの設定</h1>
   <p class="lead">このアプリはあなたのGroq APIキーで文字起こしします。キーは端末内にのみ保存され、外部には送信されません。</p>
 
-  <div class="howto">
-    <h2>APIキーの取得方法</h2>
-    <ol>
-      <li><a href="https://console.groq.com/keys" target="_blank" rel="noopener">console.groq.com/keys</a> を開く</li>
-      <li>アカウントでログイン（未登録なら新規登録）</li>
-      <li>「Create API Key」をクリックしてキーを作成</li>
-      <li>表示された <code>gsk_</code> から始まるキーをコピーして下に貼り付け</li>
-    </ol>
-  </div>
+  <!-- キーが保存済みのときはここだけを出す（入力欄と取得手順は隠す） -->
+  <p id="setup-status" class="setup-status" hidden></p>
+  <button id="setup-continue-btn" type="button" class="btn-primary" hidden>このまま始める</button>
+  <button id="setup-change-btn" type="button" class="btn-secondary btn-block" hidden>別のキーに変える</button>
 
-  <label for="api-key-input">Groq APIキー</label>
-  <input id="api-key-input" type="password" autocomplete="off" placeholder="gsk_...">
-  <button id="save-key-btn" type="button" class="btn-primary">保存して始める</button>
+  <!-- キー未設定のときだけ出す一式（取得手順・入力欄・保存ボタン） -->
+  <div id="setup-form" class="setup-form">
+    <div class="howto">
+      <h2>APIキーの取得方法</h2>
+      <ol>
+        <li><a href="https://console.groq.com/keys" target="_blank" rel="noopener">console.groq.com/keys</a> を開く</li>
+        <li>アカウントでログイン（未登録なら新規登録）</li>
+        <li>「Create API Key」をクリックしてキーを作成</li>
+        <li>表示された <code>gsk_</code> から始まるキーをコピーして下に貼り付け</li>
+      </ol>
+    </div>
+
+    <label for="api-key-input">Groq APIキー</label>
+    <input id="api-key-input" type="password" autocomplete="off" placeholder="gsk_...">
+    <button id="save-key-btn" type="button" class="btn-primary">保存して始める</button>
+  </div>
   <p id="setup-error" class="error" hidden></p>
 </section>
 

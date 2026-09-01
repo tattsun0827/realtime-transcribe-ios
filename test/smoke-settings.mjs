@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import {
   isValidApiKeyFormat,
   maskApiKey,
+  savedKeyStatus,
   selectableMicDevices,
   micOptionLabel,
   resolveMicDeviceId,
@@ -54,6 +55,25 @@ test('未設定なら伏せ字も空文字を返す', () => {
 
 test('短い値でも全体を露出しない', () => {
   assert.equal(maskApiKey('gsk_12'), '****');
+});
+
+test('保存済みなら「保存済み」と伏せ字を返し、入力欄は出さない', () => {
+  const status = savedKeyStatus('gsk_1234567890abcd');
+  assert.equal(status.saved, true);
+  assert.equal(status.label, '保存済み（gsk_…abcd）');
+});
+
+test('未設定なら未設定と返す', () => {
+  for (const empty of ['', null, undefined, '   ']) {
+    const status = savedKeyStatus(empty);
+    assert.equal(status.saved, false, `${JSON.stringify(empty)} は未設定として扱う`);
+    assert.equal(status.label, 'キーは未設定です');
+  }
+});
+
+test('保存済みの表示にキー全体を含めない', () => {
+  const key = 'gsk_1234567890abcd';
+  assert.equal(savedKeyStatus(key).label.includes(key), false);
 });
 
 const DEVICES = [
