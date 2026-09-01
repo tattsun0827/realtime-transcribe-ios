@@ -2,14 +2,15 @@
   "project": "realtime-transcribe-ios（iPhone/iPad向けリアルタイム文字起こしPWA）",
   "phase": "implement",
   "session": 1,
-  "current_step": 1,
+  "current_step": 2,
   "total_steps": 5,
-  "blocked": true,
-  "blocked_reason": "Step1完了判定「iPhone実機Safariで録音→文字表示」が未検証。ユーザー本人によるiPhone実機確認待ち",
+  "completed_steps": ["step_0", "step_1"],
+  "blocked": false,
+  "blocked_reason": "",
   "branch": "master",
   "remote": "https://github.com/tattsun0827/realtime-transcribe-ios (public)",
   "pages_url": "https://tattsun0827.github.io/realtime-transcribe-ios/",
-  "next_command": "ユーザーがiPhoneでpages_urlを開き、Groq実キーで録音→文字起こしを確認。通ればStep1完了（タグstep-1-done・step-complete実行）",
+  "next_command": "Step2着手: VADによる自動チャンク区切り＋逐次Groq送信＋draft/confirmed表示（ACSのrecordDraftSegment/watch/processDraftQueueを移植）",
   "plan_doc": "設計図/2026-09-01_realtime-transcribe-ios.md",
-  "last_saved": "2026-09-01T11:36:30.000Z"
+  "last_saved": "2026-09-01T12:10:00.000Z"
 }
