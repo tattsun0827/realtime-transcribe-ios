@@ -1,0 +1,14 @@
+{
+  "project": "realtime-transcribe-ios（iPhone/iPad向けリアルタイム文字起こしPWA）",
+  "phase": "implement",
+  "session": 1,
+  "current_step": 0,
+  "total_steps": 5,
+  "blocked": false,
+  "blocked_reason": "",
+  "branch": "master",
+  "remote": "https://github.com/tattsun0827/realtime-transcribe-ios (private)",
+  "next_command": "Step 1（walking skeleton）を実装: index.html/app.js/style.css を作りローカルで起動確認",
+  "plan_doc": "設計図/2026-09-01_realtime-transcribe-ios.md",
+  "last_saved": "2026-09-01T11:26:02.212Z"
+}
