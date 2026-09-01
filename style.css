@@ -133,38 +133,89 @@ button, .toolbar { user-select: none; -webkit-user-select: none; }
   border-bottom: 1px solid var(--border);
 }
 
-.btn-icon {
-  background: none;
-  border: none;
-  color: var(--muted);
-  font-size: 18px;
-  padding: 8px 10px;
-  min-width: 44px;
-  min-height: 44px;
+/* ツールバーのボタン。記号の下に日本語の名前を置き、押す前に何が起きるか分かるようにする。
+   横並びにすると3つ目が入らないので縦積みにして幅を抑える（iPhoneの幅375pxが基準） */
+.btn-tool {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  min-width: 60px;
+  min-height: 48px;
+  padding: 6px 8px;
   border-radius: 12px;
 }
 
-.btn-icon:hover { background: #ffffff0f; color: var(--text); }
-.btn-icon:active { background: #ffffff1a; }
+.btn-tool-icon { font-size: 17px; line-height: 1; color: var(--muted); }
+.btn-tool-text { font-size: 11px; line-height: 1; letter-spacing: 0.02em; }
 
-/* 文字サイズの操作をひとまとまりの部品に見せる */
+.btn-tool:hover { background: #ffffff14; border-color: #33405a; }
+.btn-tool:hover .btn-tool-icon { color: var(--text); }
+.btn-tool:active { background: #ffffff1f; }
+
+/* 文字サイズの操作をひとまとまりの部品に見せる。
+   「A−」「A＋」だけでは何の大きさか伝わらないので、見出しと語（小さく/大きく）を添える */
 .font-controls {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 2px;
+  gap: 3px;
   background: var(--surface-2);
-  border-radius: 999px;
-  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 4px 8px 5px;
 }
 
-.font-controls .btn-icon { min-height: 36px; padding: 4px 10px; border-radius: 999px; }
+.font-controls-title {
+  font-size: 10px;
+  line-height: 1;
+  color: var(--muted);
+  letter-spacing: 0.04em;
+}
+
+.font-controls-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.btn-step {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1;
+  padding: 6px 10px;
+  min-height: 34px;
+  border-radius: 999px;
+}
+
+.btn-step-text { font-size: 11px; color: var(--muted); }
+.btn-step:hover { border-color: #33405a; }
+.btn-step:active { background: var(--surface-2); }
+
+/* これ以上大きく（小さく）できないときは押せないことを見せる。押しても無反応、を避ける */
+.btn-step:disabled { opacity: 0.35; }
 
 .font-size-label {
-  min-width: 3.5em;
+  min-width: 3.6em;
   text-align: center;
   font-size: 12px;
-  color: var(--muted);
+  color: var(--text);
   font-variant-numeric: tabular-nums;
+}
+
+/* 幅の狭い端末では「小さく/大きく」の語を畳む。見出しの「文字の大きさ」は残るので意味は伝わる */
+@media (max-width: 400px) {
+  .btn-step-text { display: none; }
+  .btn-tool { min-width: 54px; }
 }
 
 .transcript {
@@ -302,15 +353,21 @@ button, .toolbar { user-select: none; -webkit-user-select: none; }
 /* ---- list / detail screens ---- */
 #list-screen, #detail-screen { padding: 0; }
 
+/* 会話のタイトルは長くなりうる。折り返すとツールバーが伸びて戻るボタンの位置が動くので1行に留める */
 .toolbar-title {
   font-size: 16px;
   margin: 0;
   flex: 1;
+  min-width: 0;
   text-align: center;
   font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.toolbar-spacer { min-width: 44px; }
+/* 見出しを画面の中央に置くための空き。反対側の .btn-tool と同じ幅にする */
+.toolbar-spacer { min-width: 60px; }
 
 .conversation-list {
   flex: 1;
@@ -358,7 +415,9 @@ button, .toolbar { user-select: none; -webkit-user-select: none; }
   color: var(--muted);
 }
 
+/* 2つのボタンに日本語の名前を入れると狭い端末で窮屈になるので、ここだけ少し小さくする */
 .detail-actions { gap: 10px; }
+.detail-actions .btn-secondary { font-size: 14px; white-space: nowrap; }
 
 .btn-secondary {
   flex: 1;

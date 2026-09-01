@@ -35,6 +35,9 @@ const FONT_SIZES = [16, 18, 20, 24, 28, 32, 36, 42, 48, 56, 64]; // px段階
 const DEFAULT_FONT_SIZE = 20;
 const TYPE_TOTAL_MS = 900; // 1セグメントを流し切るまでの上限。長文でもここで出し切る
 const TYPE_FRAME_MS = 33; // 流し込みの間隔（およそ30fps）
+// マイク確認ボタンの文言。ボタン本体と案内文の両方で使うため、ここ1か所で持つ
+// （別々に書くと片方だけ直して食い違い、案内文が存在しないボタンを指す事故になる）
+const MIC_TEST_START_LABEL = '🎤 マイクの音を確かめる';
 
 const setupScreen = document.getElementById('setup-screen');
 const mainScreen = document.getElementById('main-screen');
@@ -690,9 +693,9 @@ async function renderMicDevices() {
   micSelect.value = resolved;
 
   if (!inputs.length) {
-    micNote.textContent = 'マイクが見つかりません。端末に接続してから「マイクをテスト」を押してください。';
+    micNote.textContent = `マイクが見つかりません。端末に接続してから「${MIC_TEST_START_LABEL}」を押してください。`;
   } else if (inputs.some((d) => !d.label)) {
-    micNote.textContent = 'マイクの名前は、「マイクをテスト」で使用を許可すると表示されます。';
+    micNote.textContent = `マイクの名前は、「${MIC_TEST_START_LABEL}」で使用を許可すると表示されます。`;
   } else {
     micNote.textContent = `接続中のマイク: ${inputs.length}台`;
   }
@@ -720,8 +723,8 @@ function stopMicTest() {
   micTestData = null;
   settingsWave.clear();
   settingsPickEl.classList.remove('on');
-  micTestBtn.textContent = 'マイクをテスト';
-  settingsMicHint.textContent = 'テストを押すと、ここに波形が出ます';
+  micTestBtn.textContent = MIC_TEST_START_LABEL;
+  settingsMicHint.textContent = 'ここに波形が出ます';
 }
 
 async function startMicTest() {
@@ -732,7 +735,7 @@ async function startMicTest() {
   micTestAnalyser.fftSize = 512;
   micTestData = new Float32Array(micTestAnalyser.fftSize);
   source.connect(micTestAnalyser);
-  micTestBtn.textContent = 'テストを停止';
+  micTestBtn.textContent = '■ 確認をやめる';
   settingsMicHint.textContent = streamMicLabel(micTestStream);
   settingsWave.clear();
   // 許可した直後は名前が取れるようになるので、一覧を作り直す
@@ -891,7 +894,7 @@ copyDetailBtn.addEventListener('click', async () => {
   } catch {
     copyDetailBtn.textContent = '⛔ コピーできませんでした';
   }
-  setTimeout(() => (copyDetailBtn.textContent = '📋 コピー'), 1500);
+  setTimeout(() => (copyDetailBtn.textContent = '📋 全文をコピー'), 1500);
 });
 
 // 共有はiOS Safariのみ対応（非対応環境ではボタン自体を出さない）
@@ -918,6 +921,10 @@ function applyFontSize(px) {
   transcriptEl.style.setProperty('--font-size', px + 'px');
   detailTextEl.style.setProperty('--font-size', px + 'px');
   fontSizeLabel.textContent = px + 'px';
+  // 端に達したボタンは押せなくする（押しても何も起きない状態を見た目で分かるようにする）
+  const idx = FONT_SIZES.indexOf(px);
+  fontSmallerBtn.disabled = idx <= 0;
+  fontLargerBtn.disabled = idx === -1 || idx >= FONT_SIZES.length - 1;
   try {
     localStorage.setItem(STORAGE_KEY_FONT_SIZE, String(px));
   } catch { /* 無視 */ }

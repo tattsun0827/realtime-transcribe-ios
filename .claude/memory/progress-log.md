@@ -120,3 +120,18 @@
 2026-09-01T21:13:31.571Z [Edit] ..\..\Users\kazut\.claude\skills\realtime-transcribe-app\SKILL.md
 2026-09-01T21:13:52.623Z [Edit] ..\..\Users\kazut\Desktop\claude code\ACS 20260824\.claude\memory\HANDOFF.md
 2026-09-01T21:14:00.566Z [Edit] ..\..\Users\kazut\Desktop\claude code\ACS 20260824\.claude\memory\state.json
+2026-09-01T21:27:43.045Z [Edit] ..\..\Users\kazut\Desktop\claude code\ACS 20260824\.claude\memory\HANDOFF.md
+2026-09-01T21:27:50.419Z [Edit] ..\..\Users\kazut\Desktop\claude code\ACS 20260824\.claude\memory\state.json
+2026-09-01T23:40:41.153Z [Edit] index.html
+2026-09-01T23:40:49.234Z [Edit] index.html
+2026-09-01T23:40:54.038Z [Edit] index.html
+2026-09-01T23:40:55.400Z [Edit] index.html
+2026-09-01T23:40:56.890Z [Edit] index.html
+2026-09-01T23:41:02.195Z [Edit] index.html
+2026-09-01T23:41:04.359Z [Edit] index.html
+2026-09-01T23:41:05.797Z [Edit] index.html
+2026-09-01T23:41:23.133Z [Edit] style.css
+2026-09-01T23:41:27.576Z [Edit] style.css
+2026-09-01T23:41:30.609Z [Edit] app.js
+2026-09-01T23:41:36.121Z [Edit] app.js
+2026-09-02T08:45 [note] UI: ツールバーの記号ボタンに日本語名を付与（会話一覧/設定/戻る/閉じる）・文字サイズに見出しと小さく大きくの語・端で無効化。マイク確認の文言を定数化して案内文と統一

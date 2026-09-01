@@ -41,14 +41,31 @@
 
 <!-- 画面2: メイン画面 -->
 <section id="main-screen" class="screen" hidden>
+  <!-- 記号だけのボタンは何が起きるか分からないので、必ず日本語の名前を添える。
+       縦積みにして横幅を抑え、iPhoneの狭い画面でも3つ並ぶようにしてある -->
   <header class="toolbar">
-    <button id="open-list-btn" type="button" class="btn-icon" aria-label="会話一覧">☰</button>
-    <div class="font-controls">
-      <button id="font-smaller-btn" type="button" class="btn-icon" aria-label="文字を小さく">A−</button>
-      <span id="font-size-label" class="font-size-label"></span>
-      <button id="font-larger-btn" type="button" class="btn-icon" aria-label="文字を大きく">A＋</button>
+    <button id="open-list-btn" type="button" class="btn-tool">
+      <span class="btn-tool-icon" aria-hidden="true">☰</span>
+      <span class="btn-tool-text">会話一覧</span>
+    </button>
+
+    <div class="font-controls" role="group" aria-label="文字の大きさ">
+      <span class="font-controls-title">文字の大きさ</span>
+      <div class="font-controls-row">
+        <button id="font-smaller-btn" type="button" class="btn-step" aria-label="文字を小さくする">
+          <span aria-hidden="true">A−</span><span class="btn-step-text">小さく</span>
+        </button>
+        <span id="font-size-label" class="font-size-label" aria-live="polite"></span>
+        <button id="font-larger-btn" type="button" class="btn-step" aria-label="文字を大きくする">
+          <span aria-hidden="true">A＋</span><span class="btn-step-text">大きく</span>
+        </button>
+      </div>
     </div>
-    <button id="open-settings-btn" type="button" class="btn-icon" aria-label="設定">⚙</button>
+
+    <button id="open-settings-btn" type="button" class="btn-tool">
+      <span class="btn-tool-icon" aria-hidden="true">⚙</span>
+      <span class="btn-tool-text">設定</span>
+    </button>
   </header>
 
   <div id="transcript" class="transcript" aria-live="polite"></div>
@@ -79,7 +96,10 @@
   <header class="toolbar">
     <span class="toolbar-spacer" aria-hidden="true"></span>
     <h1 class="toolbar-title">設定</h1>
-    <button id="close-settings-btn" type="button" class="btn-icon" aria-label="閉じる">✕</button>
+    <button id="close-settings-btn" type="button" class="btn-tool">
+      <span class="btn-tool-icon" aria-hidden="true">✕</span>
+      <span class="btn-tool-text">閉じる</span>
+    </button>
   </header>
 
   <div class="settings-body">
@@ -88,7 +108,7 @@
       <p id="key-status" class="settings-status"></p>
       <input id="settings-key-input" type="password" autocomplete="off" placeholder="gsk_...">
       <label class="checkbox-row"><input id="settings-key-reveal" type="checkbox"> 入力したキーを表示する</label>
-      <button id="settings-save-key-btn" type="button" class="btn-primary">キーを保存</button>
+      <button id="settings-save-key-btn" type="button" class="btn-primary">このキーを保存する</button>
       <p id="settings-key-msg" class="settings-msg" hidden></p>
       <p class="settings-note">キーはこの端末の中だけに保存され、Groq以外へは送信されません。新しいキーは
         <a href="https://console.groq.com/keys" target="_blank" rel="noopener">console.groq.com/keys</a> で発行できます。</p>
@@ -98,11 +118,11 @@
       <h2>マイク入力元</h2>
       <select id="mic-select" class="settings-select"></select>
       <p id="mic-note" class="settings-note">マイクの名前は、一度マイクの使用を許可すると表示されます。</p>
-      <button id="mic-test-btn" type="button" class="btn-secondary btn-block">マイクをテスト</button>
+      <button id="mic-test-btn" type="button" class="btn-secondary btn-block">🎤 マイクの音を確かめる</button>
       <div class="mic-monitor">
         <canvas id="settings-wave" class="wave" width="240" height="36" aria-hidden="true"></canvas>
         <div class="mic-monitor-meta">
-          <span id="settings-mic-hint" class="mic-name">テストを押すと、ここに波形が出ます</span>
+          <span id="settings-mic-hint" class="mic-name">ここに波形が出ます</span>
           <span id="settings-pick" class="mic-pick">拾っています</span>
         </div>
       </div>
@@ -110,14 +130,17 @@
   </div>
 
   <footer class="record-bar">
-    <button id="close-settings-footer-btn" type="button" class="btn-secondary btn-block">閉じる</button>
+    <button id="close-settings-footer-btn" type="button" class="btn-secondary btn-block">← 録音の画面へ戻る</button>
   </footer>
 </section>
 
 <!-- 画面3: 会話一覧 -->
 <section id="list-screen" class="screen" hidden>
   <header class="toolbar">
-    <button id="back-from-list-btn" type="button" class="btn-icon" aria-label="戻る">←</button>
+    <button id="back-from-list-btn" type="button" class="btn-tool">
+      <span class="btn-tool-icon" aria-hidden="true">←</span>
+      <span class="btn-tool-text">戻る</span>
+    </button>
     <h1 class="toolbar-title">会話一覧</h1>
     <span class="toolbar-spacer" aria-hidden="true"></span>
   </header>
@@ -127,14 +150,17 @@
 <!-- 画面4: 会話詳細 -->
 <section id="detail-screen" class="screen" hidden>
   <header class="toolbar">
-    <button id="back-from-detail-btn" type="button" class="btn-icon" aria-label="戻る">←</button>
+    <button id="back-from-detail-btn" type="button" class="btn-tool">
+      <span class="btn-tool-icon" aria-hidden="true">←</span>
+      <span class="btn-tool-text">一覧へ</span>
+    </button>
     <h1 id="detail-title" class="toolbar-title">会話</h1>
     <span class="toolbar-spacer" aria-hidden="true"></span>
   </header>
   <div id="detail-text" class="transcript"></div>
   <footer class="record-bar detail-actions">
-    <button id="copy-detail-btn" type="button" class="btn-secondary">📋 コピー</button>
-    <button id="share-detail-btn" type="button" class="btn-secondary" hidden>共有</button>
+    <button id="copy-detail-btn" type="button" class="btn-secondary">📋 全文をコピー</button>
+    <button id="share-detail-btn" type="button" class="btn-secondary" hidden>📤 共有する</button>
   </footer>
 </section>
 
