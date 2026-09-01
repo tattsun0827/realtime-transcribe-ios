@@ -1,13 +1,23 @@
 'use strict';
 
-import { MAX_DRAFT_QUEUE, shouldStopSegment, nextSilenceStartedAt, normalizeTranscript } from './vad-core.mjs';
+import {
+  MAX_DRAFT_QUEUE,
+  MAX_PARALLEL_SENDS,
+  VOICE_PEAK_RMS,
+  shouldStopSegment,
+  nextSilenceStartedAt,
+  normalizeTranscript,
+  isHallucination,
+  isDuplicateOfPrevious,
+} from './vad-core.mjs';
+import { createConversation, appendSegment, listConversations, getConversation, displayTitle } from './db.mjs';
 
 const STORAGE_KEY_API = 'rt_groq_api_key';
 const STORAGE_KEY_FONT_SIZE = 'rt_font_size';
 const GROQ_ENDPOINT = 'https://api.groq.com/openai/v1/audio/transcriptions';
 const GROQ_MODEL = 'whisper-large-v3';
 const PROMPT_CONTEXT_CHARS = 200; // Groqのpromptに渡す直前確定テキストの上限（ハルシネーション対策）
-const FONT_SIZES = [16, 18, 20, 24, 28, 32, 36]; // px段階
+const FONT_SIZES = [16, 18, 20, 24, 28, 32, 36, 42, 48, 56, 64]; // px段階
 const DEFAULT_FONT_SIZE = 20;
 
 const setupScreen = document.getElementById('setup-screen');
@@ -24,6 +34,17 @@ const openListBtn = document.getElementById('open-list-btn');
 const fontSmallerBtn = document.getElementById('font-smaller-btn');
 const fontLargerBtn = document.getElementById('font-larger-btn');
 const fontSizeLabel = document.getElementById('font-size-label');
+const listScreen = document.getElementById('list-screen');
+const detailScreen = document.getElementById('detail-screen');
+const backFromListBtn = document.getElementById('back-from-list-btn');
+const backFromDetailBtn = document.getElementById('back-from-detail-btn');
+const conversationListEl = document.getElementById('conversation-list');
+const detailTitleEl = document.getElementById('detail-title');
+const detailTextEl = document.getElementById('detail-text');
+const copyDetailBtn = document.getElementById('copy-detail-btn');
+const shareDetailBtn = document.getElementById('share-detail-btn');
+const levelMeter = document.getElementById('level-meter');
+const levelMeterFill = document.getElementById('level-meter-fill');
 
 let mediaStream = null;
 let audioContext = null;
@@ -32,10 +53,12 @@ let dataArray = null;
 let recording = false;
 let recordingStartMs = 0;
 let draftTimer = null; // VAD監視ループのタイマー
-let draftQueue = []; // { blob, placeholder } の処理待ちキュー
-let draftBusy = false;
+let draftQueue = []; // { blob, placeholder, conversationId } の処理待ちキュー
+let draftInFlight = 0; // Groqへ送信中の件数
 let contextText = ''; // 直前の確定テキスト（Groqのpromptへ渡す文脈）
 let rateLimited = false; // 429検出後は以降の自動送信を止める（1回だけ告知）
+let currentConversation = null; // 録音中の会話レコード（{id, ...}）。確定セグメントを都度追記する
+let wakeLock = null; // 録音中の画面消灯を防ぐWake Lockセンチネル
 const activeRecorders = new Set();
 
 // localStorageからAPIキーを取得する（無ければnull）
@@ -52,11 +75,17 @@ function saveApiKey(key) {
   localStorage.setItem(STORAGE_KEY_API, key);
 }
 
+// 4画面のうち1つだけを表示する
+const SCREENS = { setup: setupScreen, main: mainScreen, list: listScreen, detail: detailScreen };
+function showScreen(name) {
+  for (const key of Object.keys(SCREENS)) {
+    SCREENS[key].hidden = key !== name;
+  }
+}
+
 // キーの有無で初期画面を出し分ける
 function initScreen() {
-  const key = loadApiKey();
-  setupScreen.hidden = !!key;
-  mainScreen.hidden = !key;
+  showScreen(loadApiKey() ? 'main' : 'setup');
 }
 
 saveKeyBtn.addEventListener('click', () => {
@@ -96,6 +125,13 @@ function getVolume() {
   return Math.sqrt(sum / dataArray.length);
 }
 
+// 入力音量をバーで可視化する。「話しているのに拾えていない」を目で気づけるようにする
+function updateLevelMeter(rms) {
+  const pct = Math.min(100, rms * 400); // 会話音声のRMSは0.02〜0.25程度に集まる
+  levelMeterFill.style.width = pct + '%';
+  levelMeterFill.classList.toggle('voice', rms >= VOICE_PEAK_RMS);
+}
+
 // 「認識中…」のグレー表示を追加し、その要素を返す（Groq応答が来たら確定テキストに置き換える）
 function addDraftPlaceholder() {
   const span = document.createElement('span');
@@ -107,32 +143,39 @@ function addDraftPlaceholder() {
 }
 
 // draftプレースホルダーを確定テキストへ置き換える（空文字なら要素ごと消す＝無音だった扱い）
+// 保存(DB)にも表示と同じ正規化後テキストを使うため、確定テキストをそのまま返す
 function resolveDraftPlaceholder(placeholder, rawText) {
   const text = normalizeTranscript(rawText);
   if (!text) {
     placeholder.remove();
-    return;
+    return '';
   }
   placeholder.className = 'seg-confirmed';
   placeholder.textContent = text + ' ';
   transcriptEl.scrollTop = transcriptEl.scrollHeight;
+  return text;
 }
 
-// 処理待ちキューを直列で処理する（同時送信すると応答順が入れ替わり表示順が崩れるため）
-async function processDraftQueue() {
-  if (draftBusy || !draftQueue.length) return;
-  draftBusy = true;
-  const { blob, placeholder } = draftQueue.shift();
-  try {
-    await sendChunkToGroq(blob, placeholder);
-  } finally {
-    draftBusy = false;
-    if (draftQueue.length) processDraftQueue();
+// 処理待ちキューを最大MAX_PARALLEL_SENDS本まで並列で流す。
+// 表示順は「送信前にプレースホルダーをDOMへ挿入済み」であることが保証するため、
+// 応答が前後しても文章の順番は崩れない（直列にすると混雑時にキュー溢れで音声を落とす）
+function pumpDraftQueue() {
+  while (draftInFlight < MAX_PARALLEL_SENDS && draftQueue.length) {
+    const { blob, placeholder, conversationId } = draftQueue.shift();
+    draftInFlight++;
+    sendChunkToGroq(blob, placeholder, conversationId)
+      .catch((err) => console.error('[groq] unexpected', err))
+      .finally(() => {
+        draftInFlight--;
+        pumpDraftQueue();
+      });
   }
 }
 
 // 1チャンクをGroqへ送信し、結果でplaceholderを置き換える。文脈(prompt)を引き継ぐ
-async function sendChunkToGroq(blob, placeholder) {
+// conversationIdはキュー投入時点（録音中）の会話を指す。stopRecording()がcurrentConversationを
+// nullに戻した後でも、停止直前に積まれたチャンクは自分のIDを保持したまま正しく保存できる
+async function sendChunkToGroq(blob, placeholder, conversationId) {
   if (rateLimited) {
     placeholder.remove();
     return;
@@ -143,6 +186,7 @@ async function sendChunkToGroq(blob, placeholder) {
   form.append('file', blob, `audio.${ext}`);
   form.append('model', GROQ_MODEL);
   form.append('language', 'ja');
+  form.append('temperature', '0'); // 出力を決定的にして幻聴（創作）を抑える
   if (contextText) form.append('prompt', contextText.slice(-PROMPT_CONTEXT_CHARS));
 
   console.log('[groq] POST chunk', {
@@ -167,14 +211,39 @@ async function sendChunkToGroq(blob, placeholder) {
       stopRecording();
       return;
     }
+    if (res.status === 401) {
+      // キーが無効なら以降のチャンクも必ず失敗する。同じエラーを出し続けず録音ごと止める
+      rateLimited = true;
+      placeholder.remove();
+      mainError.textContent = 'APIキーが無効です。⚙ボタンからキーを入れ直してください';
+      mainError.hidden = false;
+      stopRecording();
+      return;
+    }
     if (!res.ok) {
       const text = await res.text();
       throw new Error(`Groq API エラー (${res.status}): ${text.slice(0, 200)}`);
     }
 
     const data = await res.json();
-    resolveDraftPlaceholder(placeholder, data.text || '');
-    if (data.text) contextText = data.text;
+    const candidate = normalizeTranscript(data.text || '');
+
+    // 幻聴（無音時の定型句）と、文脈promptに引きずられた直前文の再出力を捨てる
+    if (isHallucination(candidate) || isDuplicateOfPrevious(candidate, contextText)) {
+      console.log('[groq] drop suspicious text', { candidate });
+      placeholder.remove();
+      return;
+    }
+
+    const confirmedText = resolveDraftPlaceholder(placeholder, candidate);
+    if (confirmedText) {
+      contextText = confirmedText;
+      if (conversationId) {
+        appendSegment(conversationId, confirmedText).catch((err) => {
+          console.error('[db] appendSegment failed', err);
+        });
+      }
+    }
   } catch (err) {
     placeholder.remove();
     mainError.textContent = `文字起こしに失敗しました: ${err.message}`;
@@ -199,6 +268,7 @@ function recordDraftSegment() {
   const chunks = [];
   const segmentStartMs = performance.now() - recordingStartMs;
   let silenceStartedAt = null;
+  let peakRms = 0; // このセグメント中の最大音量（発話が含まれたかの判定に使う）
 
   rec.ondataavailable = (e) => {
     if (e.data && e.data.size > 0) chunks.push(e.data);
@@ -208,13 +278,21 @@ function recordDraftSegment() {
     if (recording) recordDraftSegment();
     const blob = new Blob(chunks, { type: rec.mimeType || 'audio/webm' });
     if (blob.size < 3000) return; // ほぼ無音のセグメントは送らない
+    // 音声区間ゲート: セグメント中に一度も発話音量へ達していなければ送らない。
+    // 無音をWhisperへ送ると「ご視聴ありがとうございました」等の幻聴を生むうえ、
+    // 無料枠で先に尽きるのは1日あたりのリクエスト回数(RPD)なので実質的な浪費になる
+    if (peakRms < VOICE_PEAK_RMS) {
+      console.log('[vad] skip silent segment', { peakRms: peakRms.toFixed(4) });
+      return;
+    }
     const placeholder = addDraftPlaceholder();
-    draftQueue.push({ blob, placeholder });
+    // 会話IDはキュー投入時点で確定させる。停止後に応答が返っても保存先を見失わない
+    draftQueue.push({ blob, placeholder, conversationId: currentConversation ? currentConversation.id : null });
     if (draftQueue.length > MAX_DRAFT_QUEUE) {
       const dropped = draftQueue.shift();
       dropped.placeholder.remove();
     }
-    processDraftQueue();
+    pumpDraftQueue();
   };
 
   rec.start();
@@ -224,6 +302,8 @@ function recordDraftSegment() {
     const now = performance.now();
     const elapsed = now - recordingStartMs - segmentStartMs;
     const rms = getVolume();
+    if (rms > peakRms) peakRms = rms;
+    updateLevelMeter(rms);
     const decision = shouldStopSegment({ rms, silenceStartedAt, now, elapsed });
     silenceStartedAt = nextSilenceStartedAt({ rms, silenceStartedAt, now });
     if (decision.stop) {
@@ -235,8 +315,34 @@ function recordDraftSegment() {
   watch();
 }
 
+// 録音中に画面が消えると録音も止まるため、Wake Lockで画面を点けたままにする。
+// 非対応（古いiOS等）でも例外にせず、単に何もしない
+async function acquireWakeLock() {
+  if (!('wakeLock' in navigator)) return;
+  try {
+    wakeLock = await navigator.wakeLock.request('screen');
+    wakeLock.addEventListener('release', () => { wakeLock = null; });
+  } catch (err) {
+    console.warn('[wakelock] failed', err);
+  }
+}
+
+function releaseWakeLock() {
+  if (!wakeLock) return;
+  wakeLock.release().catch(() => { /* 無視 */ });
+  wakeLock = null;
+}
+
 async function startRecording() {
-  mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  // ノイズ抑制・エコー除去・自動ゲインは認識精度に直結するため明示的に有効化する
+  mediaStream = await navigator.mediaDevices.getUserMedia({
+    audio: {
+      echoCancellation: true,
+      noiseSuppression: true,
+      autoGainControl: true,
+      channelCount: 1,
+    },
+  });
 
   audioContext = new AudioContext();
   const source = audioContext.createMediaStreamSource(mediaStream);
@@ -248,12 +354,15 @@ async function startRecording() {
   recordingStartMs = performance.now();
   contextText = '';
   draftQueue = [];
-  draftBusy = false;
+  draftInFlight = 0;
   rateLimited = false;
   recording = true;
+  currentConversation = await createConversation();
+  levelMeter.hidden = false;
+  await acquireWakeLock();
   updateRecordButton();
   recordDraftSegment();
-  console.log('[rec] started (VAD mode)', { mimeType: pickMimeType() });
+  console.log('[rec] started (VAD mode)', { mimeType: pickMimeType(), conversationId: currentConversation.id });
 }
 
 // 音声まわりの後始末。停止ボタンから呼ぶ。teardownの順番が重要:
@@ -277,9 +386,20 @@ function stopRecording() {
   }
   analyser = null;
   dataArray = null;
+  currentConversation = null; // 保存先は録音中のみ有効。停止後に届く最後のチャンクはキューが保持したIDで保存される
+  releaseWakeLock();
+  levelMeter.hidden = true;
+  updateLevelMeter(0);
   updateRecordButton();
   console.log('[rec] stopped');
 }
+
+// iOSでタブを離れるとWake Lockは自動解放される。戻ってきて録音中なら取り直す
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && recording && !wakeLock) {
+    acquireWakeLock();
+  }
+});
 
 function updateRecordButton() {
   recordBtn.classList.toggle('recording', recording);
@@ -310,10 +430,90 @@ openSettingsBtn.addEventListener('click', () => {
   initScreen();
 });
 
-// 会話一覧はStep4で実装予定。今は未実装であることを明示する
-openListBtn.addEventListener('click', () => {
-  alert('会話の保存・一覧はまだ実装していません（次のStepで追加予定です）');
+// 会話の全文を1つの文字列にする（コピー・共有・詳細表示で共用）
+function conversationToText(conv) {
+  return conv.segments.map((s) => s.text).join(' ');
+}
+
+// 会話一覧を描画する
+async function renderConversationList() {
+  conversationListEl.textContent = '';
+  let rows;
+  try {
+    rows = await listConversations();
+  } catch (err) {
+    console.error('[db] list failed', err);
+    const p = document.createElement('p');
+    p.className = 'conversation-empty';
+    p.textContent = '会話を読み込めませんでした';
+    conversationListEl.appendChild(p);
+    return;
+  }
+  if (!rows.length) {
+    const p = document.createElement('p');
+    p.className = 'conversation-empty';
+    p.textContent = 'まだ保存された会話はありません。録音すると自動で保存されます。';
+    conversationListEl.appendChild(p);
+    return;
+  }
+  for (const conv of rows) {
+    const item = document.createElement('button');
+    item.type = 'button';
+    item.className = 'conversation-item';
+    const title = document.createElement('div');
+    title.className = 'conversation-item-title';
+    title.textContent = displayTitle(conv);
+    const meta = document.createElement('div');
+    meta.className = 'conversation-item-meta';
+    const d = new Date(conv.createdAt);
+    const pad = (n) => String(n).padStart(2, '0');
+    meta.textContent = `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())} ・ ${conv.segments.length}件`;
+    item.append(title, meta);
+    item.addEventListener('click', () => openConversationDetail(conv.id));
+    conversationListEl.appendChild(item);
+  }
+}
+
+// 会話詳細を開く
+async function openConversationDetail(id) {
+  const conv = await getConversation(id);
+  if (!conv) return;
+  detailTitleEl.textContent = displayTitle(conv);
+  detailTextEl.textContent = conversationToText(conv) || '(内容がありません)';
+  detailTextEl.style.setProperty('--font-size', currentFontSize + 'px');
+  showScreen('detail');
+}
+
+openListBtn.addEventListener('click', async () => {
+  showScreen('list');
+  await renderConversationList();
 });
+
+backFromListBtn.addEventListener('click', () => showScreen('main'));
+backFromDetailBtn.addEventListener('click', async () => {
+  showScreen('list');
+  await renderConversationList();
+});
+
+copyDetailBtn.addEventListener('click', async () => {
+  try {
+    await navigator.clipboard.writeText(detailTextEl.textContent || '');
+    copyDetailBtn.textContent = '✅ コピーしました';
+  } catch {
+    copyDetailBtn.textContent = '⛔ コピーできませんでした';
+  }
+  setTimeout(() => (copyDetailBtn.textContent = '📋 コピー'), 1500);
+});
+
+// 共有はiOS Safariのみ対応（非対応環境ではボタン自体を出さない）
+if (navigator.share) {
+  shareDetailBtn.hidden = false;
+  shareDetailBtn.addEventListener('click', async () => {
+    try {
+      await navigator.share({ title: detailTitleEl.textContent, text: detailTextEl.textContent || '' });
+    } catch { /* ユーザーがキャンセルした場合も来るので無視 */ }
+  });
+}
 
 // 保存済みの文字サイズを取得する（無ければ既定値）
 function loadFontSize() {
@@ -324,9 +524,10 @@ function loadFontSize() {
   return DEFAULT_FONT_SIZE;
 }
 
-// 文字サイズを表示エリアに反映し、ラベル表示とlocalStorage保存を行う
+// 文字サイズを表示エリア（メイン・詳細の両方）に反映し、ラベル表示とlocalStorage保存を行う
 function applyFontSize(px) {
   transcriptEl.style.setProperty('--font-size', px + 'px');
+  detailTextEl.style.setProperty('--font-size', px + 'px');
   fontSizeLabel.textContent = px + 'px';
   try {
     localStorage.setItem(STORAGE_KEY_FONT_SIZE, String(px));

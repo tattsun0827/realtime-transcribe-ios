@@ -7,6 +7,8 @@ import {
   shouldStopSegment,
   nextSilenceStartedAt,
   normalizeTranscript,
+  isHallucination,
+  isDuplicateOfPrevious,
 } from '../vad-core.mjs';
 
 let failures = 0;
@@ -80,6 +82,39 @@ test('normalizeTranscript: 連続する句読点を1つに畳む', () => {
 test('normalizeTranscript: 通常の文はそのまま保持する', () => {
   const text = '今日は天気がいいので、散歩に行きました。';
   assert.equal(normalizeTranscript(text), text);
+});
+
+test('isHallucination: 空文字は幻聴扱い', () => {
+  assert.equal(isHallucination(''), true);
+  assert.equal(isHallucination('。。。'), true);
+});
+
+test('isHallucination: 定型句だけのセグメントは幻聴と判定する', () => {
+  assert.equal(isHallucination('ご視聴ありがとうございました'), true);
+  assert.equal(isHallucination('ご視聴ありがとうございました。'), true);
+  assert.equal(isHallucination('チャンネル登録お願いします'), true);
+  assert.equal(isHallucination('Thank you for watching'), true);
+});
+
+test('isHallucination: 定型句を含むだけの長い文は消さない', () => {
+  const text = '本日はご視聴ありがとうございました、と司会が締めくくりました。';
+  assert.equal(isHallucination(text), false);
+});
+
+test('isHallucination: 通常の発話は幻聴と判定しない', () => {
+  assert.equal(isHallucination('明日の会議は10時からです'), false);
+});
+
+test('isDuplicateOfPrevious: 同一テキストは重複と判定する', () => {
+  assert.equal(isDuplicateOfPrevious('こんにちは。', 'こんにちは'), true);
+});
+
+test('isDuplicateOfPrevious: 異なるテキストは重複ではない', () => {
+  assert.equal(isDuplicateOfPrevious('こんにちは', 'さようなら'), false);
+});
+
+test('isDuplicateOfPrevious: 直前が無い場合は重複ではない', () => {
+  assert.equal(isDuplicateOfPrevious('こんにちは', ''), false);
 });
 
 if (failures > 0) {
