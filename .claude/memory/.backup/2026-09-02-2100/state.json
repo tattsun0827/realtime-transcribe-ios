@@ -1,0 +1,25 @@
+{
+  "project": "realtime-transcribe-ios（iPhone/iPad向けリアルタイム文字起こしPWA）",
+  "phase": "UI刷新と安定化を反映済み。録音ボタンの見え方が未決着",
+  "session": 3,
+  "current_step": 5,
+  "total_steps": 5,
+  "completed_steps": ["step_0", "step_1", "step_2", "step_3", "step_4"],
+  "blocked": "本人の画面で「録音開始ボタンが無い」と2回報告。こちらの実測（1857x830）では y=753〜814 に描画されビューポート内。いただいた画像は下端が切れており再現できていない",
+  "branch": "master",
+  "remote": "https://github.com/tattsun0827/realtime-transcribe-ios (public)",
+  "pages_url": "https://tattsun0827.github.io/realtime-transcribe-ios/",
+  "skill": "~/.claude/skills/realtime-transcribe-app/SKILL.md（運用・改修の正本）",
+  "verify_command": "node scripts/verify.mjs（変更したら必ず通す・9項目/テスト20件）",
+  "next_command": "フッター（.record-bar）を必ず画面内に固定する修正。.screen の min-height:100dvh を実高さ固定に変え、操作部がビューポート外へ出ない構造にする",
+  "plan_doc": "設計図/2026-09-01_realtime-transcribe-ios.md",
+  "session_20260902_安定化とUI刷新": {
+    "直した安定性の欠陥": "(1)マイク許可待ちの連打でrecordingが立つ前に再度startRecording()へ入り、ストリーム・AudioContext・監視ループが二重に走っていた→startingフラグで抑止 (2)AudioContextがsuspendedのまま始まると音量が常に0になり全セグメントが無音扱いで捨てられる→生成直後とvisibilitychangeでresume (3)MediaRecorderがpausedになると監視ループが静かに終わり録音中の表示のまま固まる→2秒ごとの番犬で区切り直し (4)復旧で監視ループが増殖しないようsegmentGenerationで世代管理",
+    "UIの変更": "本文のmax-widthを撤去し画面幅を使う／本文の「認識中…」を廃止し、空のプレースホルダーだけ残して進行は入力モニターの「変換中」で示す／確定文はtypingChunkSize()で900ms以内に流し込むタイプライター表示／配色を変数化しツールバー・録音ボタン(ピル型)・設定と一覧をカード化",
+    "本人の指摘（守ること）": "左右の空間が無駄（max-widthを入れない）／認識中の文字は不要／もっとリアルタイムに出る感じがほしい",
+    "リアルタイム化の残り": "実際の到達時間は未改善。速くするにはMIN_DRAFT_MS(4000)を下げる必要があるが、ACS実績値のため未着手。2秒程度まで下げると体感は上がるが文が途中で切れやすくRPD消費も増える。本人へ提案済み・未回答",
+    "AI整形": "していない。normalizeTranscript(空白・句読点の圧縮)＋幻聴フィルタ＋重複除去のみ。録音後にまとめて整える形なら追加可能と提案済み・未回答",
+    "コミット": "285b1de（安定化）/ a91061d（UI刷新）を master へ push・Pages built 確認済み"
+  },
+  "last_saved": "2026-09-02T00:00:00.000Z"
+}
