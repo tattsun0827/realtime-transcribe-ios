@@ -1,34 +1,32 @@
 {
   "project": "realtime-transcribe-ios（iPhone/iPad向けリアルタイム文字起こしPWA）",
-  "phase": "キー設定画面の修正はmasterへローカル合流済み。公開は本人保留（UIが未完成・いまいちとの判断）",
-  "session": 4,
-  "current_step": 5,
-  "total_steps": 5,
-  "completed_steps": ["step_0", "step_1", "step_2", "step_3", "step_4"],
-  "blocked": "(1)公開の可否が本人保留。UIが未完成・いまいちとの判断で、どこが不満かは未聴取 (2)本人の画面で「録音開始ボタンが無い」と2回報告・再現できておらず未決着",
-  "branch": "master（fix/setup-key-saved をローカル合流済み・master は未push＝未公開）",
-  "公開の作法": "master へ push した瞬間に GitHub Pages が自動ビルドして公開される。UI未完成のうちは push しない。中身は origin/fix/setup-key-saved 側に保全済みなので消えない",
+  "phase": "UIの日本語化とGoogleドライブ保存を master へ合流し公開済み。ドライブへの実書き込みのみ未実証",
+  "session": 5,
+  "current_step": 6,
+  "total_steps": 6,
+  "completed_steps": ["step_0", "step_1", "step_2", "step_3", "step_4", "step_5"],
+  "blocked": "(1)ドライブ保存の実書き込みが未実証（本人のGoogle OAuthクライアントID登録待ち） (2)保存形式をGoogleドキュメントにする案が提案済み・未回答 (3)合流済みブランチ feat/ui-labels の削除可否が未回答 (4)本人の画面で「録音開始ボタンが無い」と2回報告・再現できておらず未決着",
+  "branch": "master（feat/ui-labels を --no-ff で合流・push済み＝公開済み）",
+  "公開の作法": "master へ push した瞬間に GitHub Pages が自動ビルドして公開される。ビルド完了は gh api repos/tattsun0827/realtime-transcribe-ios/pages/builds/latest -q '.status' が built になるまで待つ。確認URLには ?t=<unix時刻> を付けてキャッシュを迂回する",
   "remote": "https://github.com/tattsun0827/realtime-transcribe-ios (public)",
   "pages_url": "https://tattsun0827.github.io/realtime-transcribe-ios/",
   "skill": "~/.claude/skills/realtime-transcribe-app/SKILL.md（運用・改修の正本）",
-  "verify_command": "node scripts/verify.mjs（変更したら必ず通す・7項目/テスト3本）",
-  "next_command": "UIのどこが「いまいち」なのかを本人へ聞く（画面と不満点を具体的に）。直してから公開の可否を確認し、合意が取れて初めて git push origin master",
+  "verify_command": "node scripts/verify.mjs（変更したら必ず通す・7項目/テスト4本）",
+  "local_server": "cd /c/Projects/realtime-transcribe-ios && npx --yes serve -l 5510 .（localhost なのでマイクも使える）",
+  "next_command": "本人が Google Cloud で OAuth クライアントID（ウェブアプリケーション／生成元に https://tattsun0827.github.io と http://localhost:5510／同意画面のテストユーザーに本人）を作り、設定→Googleドライブ保存へ貼る。その後 iPhone で録音→☁保存 を1本通す",
   "plan_doc": "設計図/2026-09-01_realtime-transcribe-ios.md",
+  "session_20260902_UI日本語化とドライブ保存": {
+    "本人の指摘": "記号だけのボタン（☰ ⚙ ✕ ← A−/A＋）では意味が分からない。設定・保存・戻る・文字を大きくするボタンが分かるようにしてほしい",
+    "UIの変更": "ツールバーを記号＋日本語名の縦積み（.btn-tool）に統一／文字サイズに見出しと「小さく」「大きく」／上下限でボタンを disabled ／文言を動詞まで明示／マイク確認の文言を MIC_TEST_START_LABEL に集約／会話タイトルを1行省略",
+    "ドライブ保存の設計": "経路は本人が「ドライブへ直接」を選択。GIS のトークンクライアント＋Drive REST。純粋関数は drive-core.mjs、通信は drive.mjs、テストは test/smoke-drive.mjs 19件。権限は drive.file 限定。トークンはメモリのみ、クライアントIDは公開前提の識別子なので localStorage。GISは起動時に先読み（押してから読むとiOSがポップアップを塞ぐ）",
+    "保存の流れ": "保存ボタンは会話詳細と録音停止直後のメイン画面の2か所。押すと確認ダイアログで「どこへ・どのファイル名で・何文字」を見せ、保存する/しないを選ばせる。変換待ちが残っていればその旨も出す。保存先はドライブ直下の「リアルタイム文字起こし」フォルダ（無ければ自動作成）",
+    "確認済み": "verify 全項目OK（テスト4本）。390pxと1440pxで4画面を目視。ダミーIDで保存まで押し、Googleのログイン画面が開いて弾かれ日本語の案内が出て押し直せることまで確認",
+    "未確認": "実際のドライブへの書き込み（クライアントID待ち）／iPhone実機での今回UIの見え方",
+    "コミット": "c4faa1f（UI）/ 932261d（ドライブ保存）/ 23b7ba9（memory）→ 03a9829 で master へ合流・push・Pages built 確認済み"
+  },
   "session_20260902_キー設定画面": {
-    "本人の訴え": "groq keyの設定画面が毎回聞いてくるのは不要。保存済みと出るようにしてほしい",
-    "原因（実測）": "index.html の #setup-screen に hidden が無く、app.js は type=\"module\"＝遅延実行のため、initScreen() が走るまで設定画面が描画されていた。キーは正しく保存されており、コード側のロジック（showScreen(loadApiKey() ? 'main' : 'setup')）は元から正しい",
-    "直した内容": "#setup-screen に hidden を付与／キーがあるときは「保存済み（gsk_…abcd）」＋「このまま始める」「別のキーに変える」だけを出し #setup-form（取得手順・入力欄・保存ボタン）を隠す／⚙設定の文言も「現在のキー」→「保存済み」へ統一／出し分けは savedKeyStatus() として settings-core.mjs に純粋関数化しテスト4件追加",
-    "検査": "node scripts/verify.mjs 7項目＋テスト3本すべて通過",
-    "未実施": "ブラウザでの目視確認（3状態）／master合流／Pages反映／iOS Chromeでの実機確認",
-    "利用環境（本人）": "PCはWindows、iPhone/iPadは**Chrome**で使う。iOS ChromeはWebKitなので audio/mp4 制約は同じで動く見込みだが未検証。ホーム画面追加はChromeだと保存領域が分かれる恐れがあるためSafariからを推奨と伝達済み",
-    "訂正": "SKILL.md の「PC横長対策として本文を max-width:720px 中央寄せで対処済み」は誤り。実際の .transcript に max-width は無く、本人指示で撤去された経緯がある（720px は会話一覧のカード側）"
+    "原因（実測）": "index.html の #setup-screen に hidden が無く、app.js は type=\"module\"＝遅延実行のため initScreen() が走るまで設定画面が描画されていた。キー保存とロジックは元から正しい",
+    "利用環境（本人）": "PCはWindows、iPhone/iPadは Chrome で使う。ホーム画面追加は保存領域が分かれる恐れがあるためSafariからを推奨と伝達済み"
   },
-  "session_20260902_安定化とUI刷新": {
-    "直した安定性の欠陥": "(1)マイク許可待ちの連打でrecordingが立つ前に再度startRecording()へ入り二重に走っていた→startingフラグ (2)AudioContextがsuspendedのまま始まると音量が常に0で全セグメント無音扱い→生成直後とvisibilitychangeでresume (3)MediaRecorderがpausedになると監視ループが静かに終わる→2秒ごとの番犬 (4)監視ループ増殖をsegmentGenerationで世代管理",
-    "UIの変更": "本文のmax-widthを撤去し画面幅を使う／「認識中…」を廃止／確定文はtypingChunkSize()で900ms以内に流し込む／配色を変数化しカード化",
-    "本人の指摘（守ること）": "左右の空間が無駄（max-widthを入れない）／認識中の文字は不要／もっとリアルタイムに出る感じがほしい",
-    "リアルタイム化の残り": "MIN_DRAFT_MS(4000)を下げれば体感は上がるがACS実績値のため未着手。提案済み・未回答",
-    "コミット": "285b1de（安定化）/ a91061d（UI刷新）を master へ push・Pages built 確認済み"
-  },
-  "last_saved": "2026-09-02T21:10:00+09:00"
+  "last_saved": "2026-09-02T16:30:00+09:00"
 }
