@@ -97,6 +97,7 @@ button, .toolbar { user-select: none; -webkit-user-select: none; }
 
 #api-key-input:focus,
 #settings-key-input:focus,
+#drive-client-id-input:focus,
 .settings-select:focus {
   outline: none;
   border-color: var(--accent);
@@ -415,8 +416,17 @@ button, .toolbar { user-select: none; -webkit-user-select: none; }
   color: var(--muted);
 }
 
-/* 2つのボタンに日本語の名前を入れると狭い端末で窮屈になるので、ここだけ少し小さくする */
-.detail-actions { gap: 10px; }
+/* ドライブ保存は主役なので1行を独り占めさせ、コピー・共有はその下に並べる。
+   3つを横に並べるとiPhoneの幅で文字が折り返して読めなくなる */
+.detail-actions {
+  width: 100%;
+  max-width: 480px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.detail-actions-row { display: flex; gap: 10px; }
 .detail-actions .btn-secondary { font-size: 14px; white-space: nowrap; }
 
 .btn-secondary {
@@ -485,6 +495,7 @@ button, .toolbar { user-select: none; -webkit-user-select: none; }
 .settings-msg[hidden] { display: none; }
 
 #settings-key-input,
+#drive-client-id-input,
 .settings-select {
   font-size: 16px; /* iOSは16px未満の入力欄で自動ズームするため下げない */
   padding: 14px;
@@ -511,3 +522,55 @@ button, .toolbar { user-select: none; -webkit-user-select: none; }
 
 /* 画面下の「閉じる」は、録音ボタンと同じ幅に揃える（PCで端から端まで伸びると間延びする） */
 .record-bar .btn-block { max-width: 480px; }
+
+/* ---- 保存の確認ダイアログ ---- */
+/* 保存は取り消せない外向きの操作なので、押した直後に何が起きるかを見せてから実行する */
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  background: #000000b8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.dialog-backdrop[hidden] { display: none; }
+
+.dialog {
+  width: 100%;
+  max-width: 420px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: 0 18px 50px #00000080;
+}
+
+.dialog-title { font-size: 17px; margin: 0; }
+
+.dialog-body {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.75;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.dialog-status { margin: 0; font-size: 13px; line-height: 1.7; color: var(--muted); }
+.dialog-status.ok { color: var(--ok); }
+.dialog-status.error { color: var(--danger); }
+.dialog-status[hidden] { display: none; }
+
+.dialog-link { font-size: 13px; color: var(--accent); }
+.dialog-link[hidden] { display: none; }
+
+/* 「しない」を左、「保存する」を右に置き、幅は半分ずつ。
+   btn-block（幅100%）のままだと2つ並べたとき右のボタンが枠から出る */
+.dialog-actions { display: flex; gap: 10px; }
+.dialog-actions button { flex: 1 1 0; width: auto; min-width: 0; max-width: none; }
+.dialog-actions button:disabled { opacity: 0.5; }

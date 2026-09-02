@@ -84,6 +84,8 @@
           <span id="mic-pick" class="mic-pick">拾っています</span>
         </div>
       </div>
+      <!-- 録音を止めた直後にここへ出す。一覧をたどらずその場でドライブへ残せるようにする -->
+      <button id="save-drive-main-btn" type="button" class="btn-secondary btn-block" hidden>☁ いまの会話をドライブに保存</button>
       <button id="record-btn" type="button" class="btn-record">
         <span id="record-btn-label">録音開始</span>
       </button>
@@ -112,6 +114,19 @@
       <p id="settings-key-msg" class="settings-msg" hidden></p>
       <p class="settings-note">キーはこの端末の中だけに保存され、Groq以外へは送信されません。新しいキーは
         <a href="https://console.groq.com/keys" target="_blank" rel="noopener">console.groq.com/keys</a> で発行できます。</p>
+    </section>
+
+    <section class="settings-group">
+      <h2>Googleドライブ保存</h2>
+      <p id="drive-status" class="settings-status"></p>
+      <input id="drive-client-id-input" type="text" autocomplete="off" spellcheck="false" placeholder="000000000000-xxxx.apps.googleusercontent.com">
+      <button id="drive-save-client-id-btn" type="button" class="btn-primary">このIDを保存する</button>
+      <p id="drive-client-id-msg" class="settings-msg" hidden></p>
+      <button id="drive-disconnect-btn" type="button" class="btn-secondary btn-block">Googleとの接続を切る</button>
+      <p class="settings-note">保存すると、ドライブに「リアルタイム文字起こし」フォルダを作り、その中へテキストで残します。
+        アプリが触れるのは、このアプリが作ったファイルだけです。初回だけ
+        <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener">Google Cloud のクライアントID</a>
+        （種類はウェブアプリケーション、承認済みJavaScript生成元に <code>https://tattsun0827.github.io</code> を登録）を作って、上に貼り付けてください。</p>
     </section>
 
     <section class="settings-group">
@@ -158,11 +173,30 @@
     <span class="toolbar-spacer" aria-hidden="true"></span>
   </header>
   <div id="detail-text" class="transcript"></div>
-  <footer class="record-bar detail-actions">
-    <button id="copy-detail-btn" type="button" class="btn-secondary">📋 全文をコピー</button>
-    <button id="share-detail-btn" type="button" class="btn-secondary" hidden>📤 共有する</button>
+  <footer class="record-bar">
+    <div class="detail-actions">
+      <button id="save-drive-btn" type="button" class="btn-primary btn-block">☁ Googleドライブに保存</button>
+      <div class="detail-actions-row">
+        <button id="copy-detail-btn" type="button" class="btn-secondary">📋 全文をコピー</button>
+        <button id="share-detail-btn" type="button" class="btn-secondary" hidden>📤 共有する</button>
+      </div>
+    </div>
   </footer>
 </section>
+
+<!-- 保存の確認。押す前に「どこへ・何を」を見せ、保存する / しない を本人に選ばせる -->
+<div id="drive-dialog" class="dialog-backdrop" hidden>
+  <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="drive-dialog-title">
+    <h2 id="drive-dialog-title" class="dialog-title">Googleドライブに保存しますか？</h2>
+    <p id="drive-dialog-body" class="dialog-body"></p>
+    <p id="drive-dialog-status" class="dialog-status" hidden></p>
+    <a id="drive-dialog-link" class="dialog-link" href="#" target="_blank" rel="noopener" hidden>保存したファイルを開く</a>
+    <div class="dialog-actions">
+      <button id="drive-cancel-btn" type="button" class="btn-secondary btn-block">しない</button>
+      <button id="drive-confirm-btn" type="button" class="btn-primary btn-block">保存する</button>
+    </div>
+  </div>
+</div>
 
 <script type="module" src="app.js"></script>
 </body>
