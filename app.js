@@ -22,10 +22,14 @@ import {
   typingChunkSize,
 } from './settings-core.mjs';
 import { createConversation, appendSegment, listConversations, getConversation, displayTitle } from './db.mjs';
+import { DRIVE_FOLDER_NAME, buildFileName, buildSavePreview, isValidClientId } from './drive-core.mjs';
+import { saveTextToDrive, disconnectDrive, warmUpDrive } from './drive.mjs';
 
 const STORAGE_KEY_API = 'rt_groq_api_key';
 const STORAGE_KEY_FONT_SIZE = 'rt_font_size';
 const STORAGE_KEY_MIC = 'rt_mic_device_id';
+// GoogleのクライアントIDは公開前提の識別子（秘密の値ではない）ので、キーと同じく端末に置く
+const STORAGE_KEY_DRIVE_CLIENT = 'rt_google_client_id';
 const WAVE_ACCENT = '#4f8cff'; // 送信対象の音量（style.css の --accent と同色）
 const WAVE_QUIET = '#3a4150'; // 送信されない小さい音
 const GROQ_ENDPOINT = 'https://api.groq.com/openai/v1/audio/transcriptions';
@@ -35,6 +39,9 @@ const FONT_SIZES = [16, 18, 20, 24, 28, 32, 36, 42, 48, 56, 64]; // px段階
 const DEFAULT_FONT_SIZE = 20;
 const TYPE_TOTAL_MS = 900; // 1セグメントを流し切るまでの上限。長文でもここで出し切る
 const TYPE_FRAME_MS = 33; // 流し込みの間隔（およそ30fps）
+// マイク確認ボタンの文言。ボタン本体と案内文の両方で使うため、ここ1か所で持つ
+// （別々に書くと片方だけ直して食い違い、案内文が存在しないボタンを指す事故になる）
+const MIC_TEST_START_LABEL = '🎤 マイクの音を確かめる';
 
 const setupScreen = document.getElementById('setup-screen');
 const mainScreen = document.getElementById('main-screen');
@@ -63,6 +70,20 @@ const detailTitleEl = document.getElementById('detail-title');
 const detailTextEl = document.getElementById('detail-text');
 const copyDetailBtn = document.getElementById('copy-detail-btn');
 const shareDetailBtn = document.getElementById('share-detail-btn');
+const saveDriveBtn = document.getElementById('save-drive-btn');
+const saveDriveMainBtn = document.getElementById('save-drive-main-btn');
+const driveDialog = document.getElementById('drive-dialog');
+const driveDialogTitle = document.getElementById('drive-dialog-title');
+const driveDialogBody = document.getElementById('drive-dialog-body');
+const driveDialogStatus = document.getElementById('drive-dialog-status');
+const driveDialogLink = document.getElementById('drive-dialog-link');
+const driveConfirmBtn = document.getElementById('drive-confirm-btn');
+const driveCancelBtn = document.getElementById('drive-cancel-btn');
+const driveStatusEl = document.getElementById('drive-status');
+const driveClientIdInput = document.getElementById('drive-client-id-input');
+const driveSaveClientIdBtn = document.getElementById('drive-save-client-id-btn');
+const driveClientIdMsg = document.getElementById('drive-client-id-msg');
+const driveDisconnectBtn = document.getElementById('drive-disconnect-btn');
 const micMonitor = document.getElementById('mic-monitor');
 const mainWaveCanvas = document.getElementById('main-wave');
 const micNameEl = document.getElementById('mic-name');
@@ -101,6 +122,8 @@ let draftInFlight = 0; // Groqへ送信中の件数
 let contextText = ''; // 直前の確定テキスト（Groqのpromptへ渡す文脈）
 let rateLimited = false; // 429検出後は以降の自動送信を止める（1回だけ告知）
 let currentConversation = null; // 録音中の会話レコード（{id, ...}）。確定セグメントを都度追記する
+let lastConversationId = null; // 直前に録音した会話。停止後もドライブ保存の対象として覚えておく
+let openedConversationId = null; // 会話詳細で開いている会話（詳細画面の保存ボタン用）
 let wakeLock = null; // 録音中の画面消灯を防ぐWake Lockセンチネル
 const activeRecorders = new Set();
 
@@ -558,6 +581,8 @@ async function startRecording() {
   recording = true;
   segmentGeneration++; // 前回の録音に属する監視ループが残っていても、ここで確実に無効化する
   currentConversation = await createConversation();
+  lastConversationId = currentConversation.id;
+  updateDriveMainButton(); // 録音中は保存ボタンを引っ込める
   micMonitor.hidden = false;
   mainWave.clear();
   await acquireWakeLock();
@@ -597,6 +622,7 @@ function stopRecording() {
   mainWave.clear();
   updateBusyIndicator(); // 変換待ちが残っていればモニターを残し、無ければここで消える
   updateRecordButton();
+  updateDriveMainButton(); // 録音した直後に、その場でドライブへ保存できるようにする
   console.log('[rec] stopped');
 }
 
@@ -690,9 +716,9 @@ async function renderMicDevices() {
   micSelect.value = resolved;
 
   if (!inputs.length) {
-    micNote.textContent = 'マイクが見つかりません。端末に接続してから「マイクをテスト」を押してください。';
+    micNote.textContent = `マイクが見つかりません。端末に接続してから「${MIC_TEST_START_LABEL}」を押してください。`;
   } else if (inputs.some((d) => !d.label)) {
-    micNote.textContent = 'マイクの名前は、「マイクをテスト」で使用を許可すると表示されます。';
+    micNote.textContent = `マイクの名前は、「${MIC_TEST_START_LABEL}」で使用を許可すると表示されます。`;
   } else {
     micNote.textContent = `接続中のマイク: ${inputs.length}台`;
   }
@@ -720,8 +746,8 @@ function stopMicTest() {
   micTestData = null;
   settingsWave.clear();
   settingsPickEl.classList.remove('on');
-  micTestBtn.textContent = 'マイクをテスト';
-  settingsMicHint.textContent = 'テストを押すと、ここに波形が出ます';
+  micTestBtn.textContent = MIC_TEST_START_LABEL;
+  settingsMicHint.textContent = 'ここに波形が出ます';
 }
 
 async function startMicTest() {
@@ -732,7 +758,7 @@ async function startMicTest() {
   micTestAnalyser.fftSize = 512;
   micTestData = new Float32Array(micTestAnalyser.fftSize);
   source.connect(micTestAnalyser);
-  micTestBtn.textContent = 'テストを停止';
+  micTestBtn.textContent = '■ 確認をやめる';
   settingsMicHint.textContent = streamMicLabel(micTestStream);
   settingsWave.clear();
   // 許可した直後は名前が取れるようになるので、一覧を作り直す
@@ -756,6 +782,9 @@ async function openSettings() {
   renderKeyStatus();
   settingsKeyInput.value = '';
   settingsKeyMsg.hidden = true;
+  renderDriveStatus();
+  driveClientIdInput.value = '';
+  driveClientIdMsg.hidden = true;
   showScreen('settings');
   await renderMicDevices();
 }
@@ -824,6 +853,162 @@ function conversationToText(conv) {
   return conv.segments.map((s) => s.text).join(' ');
 }
 
+// ---- Googleドライブへの保存 ----
+
+function loadDriveClientId() {
+  try {
+    return localStorage.getItem(STORAGE_KEY_DRIVE_CLIENT) || '';
+  } catch {
+    return '';
+  }
+}
+
+function saveDriveClientId(value) {
+  try {
+    localStorage.setItem(STORAGE_KEY_DRIVE_CLIENT, value);
+  } catch { /* 保存できなくても、その場の1回は使える */ }
+}
+
+// 録音を止めた直後だけ、メイン画面に保存ボタンを出す
+function updateDriveMainButton() {
+  saveDriveMainBtn.hidden = !(lastConversationId && !recording);
+}
+
+let pendingSave = null; // 確認ダイアログで「保存する」を押されたときに実行する内容
+
+function setDriveDialogStatus(text, kind = '') {
+  driveDialogStatus.textContent = text;
+  driveDialogStatus.className = `dialog-status${kind ? ` ${kind}` : ''}`;
+  driveDialogStatus.hidden = !text;
+}
+
+// 確認ダイアログを開く。saveable=false のときは案内だけを見せて「保存する」を出さない
+function openDriveDialog({ body, saveable, title = 'Googleドライブに保存しますか？', status = '', statusKind = '' }) {
+  driveDialogTitle.textContent = title;
+  driveDialogBody.textContent = body;
+  setDriveDialogStatus(status, statusKind);
+  driveDialogLink.hidden = true;
+  driveConfirmBtn.hidden = !saveable;
+  driveConfirmBtn.disabled = false;
+  driveCancelBtn.disabled = false;
+  driveCancelBtn.textContent = saveable ? 'しない' : '閉じる';
+  driveDialog.hidden = false;
+}
+
+function closeDriveDialog() {
+  driveDialog.hidden = true;
+  pendingSave = null;
+}
+
+// 保存ボタンから呼ぶ。まだ変換中の音声があれば、その旨も添えてから確認を出す
+async function requestDriveSave(conversationId) {
+  if (!conversationId) return;
+  const clientId = loadDriveClientId();
+  if (!isValidClientId(clientId)) {
+    openDriveDialog({
+      title: '先に設定が必要です',
+      body: 'Googleドライブへ保存するには、設定画面でGoogleのクライアントIDを1度だけ登録します。右上の「設定」を開き、Googleドライブ保存の欄にIDを貼り付けてください。',
+      saveable: false,
+    });
+    return;
+  }
+
+  let conv;
+  try {
+    conv = await getConversation(conversationId);
+  } catch (err) {
+    openDriveDialog({ title: '保存できません', body: `会話を読み出せませんでした: ${err.message}`, saveable: false });
+    return;
+  }
+  const text = conv ? conversationToText(conv) : '';
+  if (!text.trim()) {
+    openDriveDialog({ title: '保存できません', body: 'この会話にはまだ文字がありません。録音して文字が出てから保存してください。', saveable: false });
+    return;
+  }
+
+  const fileName = buildFileName(displayTitle(conv), conv.createdAt);
+  pendingSave = { clientId, fileName, text };
+  const converting = draftInFlight + draftQueue.length > 0;
+  openDriveDialog({
+    body: buildSavePreview({ folderName: DRIVE_FOLDER_NAME, fileName, charCount: text.length }),
+    saveable: true,
+    // 変換待ちが残っている間に保存すると、その分は入らない。押す前に分かるようにしておく
+    status: converting ? 'まだ変換中の音声があります。少し待ってから保存すると、その分も入ります。' : '',
+  });
+}
+
+driveConfirmBtn.addEventListener('click', async () => {
+  if (!pendingSave) return;
+  driveConfirmBtn.disabled = true;
+  driveCancelBtn.disabled = true;
+  try {
+    const result = await saveTextToDrive({ ...pendingSave, onStatus: (msg) => setDriveDialogStatus(msg) });
+    setDriveDialogStatus(`「${result.folderName}」フォルダに保存しました。`, 'ok');
+    if (result.link) {
+      driveDialogLink.href = result.link;
+      driveDialogLink.hidden = false;
+    }
+    driveConfirmBtn.hidden = true;
+    driveCancelBtn.textContent = '閉じる';
+    pendingSave = null;
+  } catch (err) {
+    console.error('[drive] save failed', err);
+    setDriveDialogStatus(err.message, 'error');
+    driveConfirmBtn.disabled = false; // 直せる失敗（ログインし直し等）はそのまま押し直せる
+  } finally {
+    driveCancelBtn.disabled = false;
+  }
+});
+
+driveCancelBtn.addEventListener('click', closeDriveDialog);
+
+// 背景の暗い部分を押したときも閉じる（ダイアログ本体を押しても閉じない）
+driveDialog.addEventListener('click', (e) => {
+  if (e.target === driveDialog) closeDriveDialog();
+});
+
+saveDriveBtn.addEventListener('click', () => {
+  requestDriveSave(openedConversationId).catch((err) => console.error('[drive] request failed', err));
+});
+
+saveDriveMainBtn.addEventListener('click', () => {
+  requestDriveSave(lastConversationId).catch((err) => console.error('[drive] request failed', err));
+});
+
+// 設定画面のGoogleドライブ欄
+function renderDriveStatus() {
+  const id = loadDriveClientId();
+  const ready = isValidClientId(id);
+  driveStatusEl.textContent = ready
+    ? `設定済み（${id.slice(0, 14)}…）保存先は「${DRIVE_FOLDER_NAME}」フォルダです`
+    : 'まだ設定されていません。下にクライアントIDを貼り付けてください。';
+  driveStatusEl.classList.toggle('unset', !ready);
+}
+
+driveSaveClientIdBtn.addEventListener('click', () => {
+  const value = driveClientIdInput.value.trim();
+  driveClientIdMsg.hidden = false;
+  if (!isValidClientId(value)) {
+    driveClientIdMsg.textContent = 'IDの形式が違うようです（…apps.googleusercontent.com で終わる文字列です）';
+    driveClientIdMsg.className = 'settings-msg error';
+    return;
+  }
+  saveDriveClientId(value);
+  disconnectDrive(); // IDを入れ替えたら、前のアカウントの許可は捨てる
+  driveClientIdInput.value = '';
+  driveClientIdMsg.textContent = 'クライアントIDを保存しました';
+  driveClientIdMsg.className = 'settings-msg ok';
+  renderDriveStatus();
+  warmUpDrive();
+});
+
+driveDisconnectBtn.addEventListener('click', () => {
+  disconnectDrive();
+  driveClientIdMsg.hidden = false;
+  driveClientIdMsg.textContent = 'Googleとの接続を切りました。次に保存するとき、もう一度ログインを求められます。';
+  driveClientIdMsg.className = 'settings-msg ok';
+});
+
 // 会話一覧を描画する
 async function renderConversationList() {
   conversationListEl.textContent = '';
@@ -867,6 +1052,7 @@ async function renderConversationList() {
 async function openConversationDetail(id) {
   const conv = await getConversation(id);
   if (!conv) return;
+  openedConversationId = conv.id;
   detailTitleEl.textContent = displayTitle(conv);
   detailTextEl.textContent = conversationToText(conv) || '(内容がありません)';
   detailTextEl.style.setProperty('--font-size', currentFontSize + 'px');
@@ -891,7 +1077,7 @@ copyDetailBtn.addEventListener('click', async () => {
   } catch {
     copyDetailBtn.textContent = '⛔ コピーできませんでした';
   }
-  setTimeout(() => (copyDetailBtn.textContent = '📋 コピー'), 1500);
+  setTimeout(() => (copyDetailBtn.textContent = '📋 全文をコピー'), 1500);
 });
 
 // 共有はiOS Safariのみ対応（非対応環境ではボタン自体を出さない）
@@ -918,6 +1104,10 @@ function applyFontSize(px) {
   transcriptEl.style.setProperty('--font-size', px + 'px');
   detailTextEl.style.setProperty('--font-size', px + 'px');
   fontSizeLabel.textContent = px + 'px';
+  // 端に達したボタンは押せなくする（押しても何も起きない状態を見た目で分かるようにする）
+  const idx = FONT_SIZES.indexOf(px);
+  fontSmallerBtn.disabled = idx <= 0;
+  fontLargerBtn.disabled = idx === -1 || idx >= FONT_SIZES.length - 1;
   try {
     localStorage.setItem(STORAGE_KEY_FONT_SIZE, String(px));
   } catch { /* 無視 */ }
@@ -941,3 +1131,7 @@ fontLargerBtn.addEventListener('click', () => {
 });
 
 initScreen();
+
+// クライアントID登録済みなら、Googleのログイン部品を先に読み込んでおく。
+// 保存を押してから読み始めると、待っている間にiOSがポップアップを塞ぐことがある
+if (isValidClientId(loadDriveClientId())) warmUpDrive();
